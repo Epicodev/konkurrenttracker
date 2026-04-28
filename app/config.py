@@ -8,5 +8,14 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "sqlite:///./local.db"
 
+    @property
+    def sqlalchemy_url(self) -> str:
+        url = self.database_url
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+psycopg://", 1)
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
+
 
 settings = Settings()
