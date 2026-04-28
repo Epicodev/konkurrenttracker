@@ -1,13 +1,17 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from sqlmodel import Session, select
 
 from app.config import settings
+from app.db import get_session
+from app.models import Competitor
 
 app = FastAPI(title=settings.app_name)
 
 
 @app.get("/healthz")
-def healthz() -> dict[str, str | int]:
-    return {"status": "ok", "competitors": 0}
+def healthz(session: Session = Depends(get_session)) -> dict[str, str | int]:
+    competitor_count = len(session.exec(select(Competitor)).all())
+    return {"status": "ok", "competitors": competitor_count}
 
 
 @app.get("/")
