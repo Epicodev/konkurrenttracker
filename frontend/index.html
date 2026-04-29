@@ -34,6 +34,13 @@
   <h1>Epico konkurrenttracker</h1>
   <p class="subtitle">Live overblik over signaler, jobopslag og firma-events fra de aktive konkurrenter.</p>
 
+  <div style="margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+    <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Koer alle scrapere</button>
+    <button id="btn-synthesize" style="padding: 8px 14px; background: #b41018; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer signaler (Sonnet)</button>
+    <button id="btn-report" style="padding: 8px 14px; background: #0066cc; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer rapport nu</button>
+    <span id="action-status" style="font-size: 13px; color: #666; margin-left: 8px;"></span>
+  </div>
+
   <div class="stats" id="stats"></div>
 
   <div class="tabs">
@@ -120,6 +127,20 @@
       }
     }
 
+    async function triggerAction(label, path) {
+      const status = document.getElementById("action-status");
+      status.textContent = `${label} koerer...`;
+      try {
+        const res = await fetch(path, { method: "POST" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        status.textContent = `${label} faerdig: ${JSON.stringify(data).slice(0, 200)}`;
+        setTimeout(() => refresh(), 500);
+      } catch (err) {
+        status.textContent = `${label} fejlede: ${err.message}`;
+      }
+    }
+
     async function init() {
       try {
         const [stats, competitors] = await Promise.all([fetchJSON("/api/stats"), fetchJSON("/api/competitors")]);
@@ -128,6 +149,9 @@
         const sel = document.getElementById("competitor-filter");
         competitors.forEach(c => sel.innerHTML += `<option value="${c.slug}">${c.name}</option>`);
         sel.addEventListener("change", e => { state.competitor = e.target.value; refresh(); });
+        document.getElementById("btn-scrape").addEventListener("click", () => triggerAction("Scrape", "/admin/scrape/all"));
+        document.getElementById("btn-synthesize").addEventListener("click", () => triggerAction("Syntese", "/admin/analyze/synthesize"));
+        document.getElementById("btn-report").addEventListener("click", () => triggerAction("Rapport", "/admin/report/build"));
         document.querySelectorAll(".tab").forEach(t => {
           t.addEventListener("click", e => {
             document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));

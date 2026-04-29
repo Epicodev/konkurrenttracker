@@ -26,6 +26,37 @@ from app.scrapers.wayback import WaybackScraper
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_basic_auth)])
 
 
+@router.get("/config-check")
+def config_check() -> dict[str, Any]:
+    """Vis hvilke env-vars der er sat. Bruges til at debugge Railway-deploys."""
+    import os
+
+    def status(var: str) -> str:
+        val = os.environ.get(var)
+        if not val:
+            return "MISSING"
+        if "KEY" in var or "TOKEN" in var or "PASSWORD" in var or "URL" in var:
+            return f"SET (len={len(val)})"
+        return f"SET ({val})"
+
+    return {
+        "database": {
+            "DATABASE_URL": status("DATABASE_URL") if os.environ.get("DATABASE_URL") else "DEFAULT (sqlite)",
+        },
+        "auth": {
+            "BASIC_AUTH_USER": status("BASIC_AUTH_USER"),
+            "BASIC_AUTH_PASSWORD": status("BASIC_AUTH_PASSWORD"),
+        },
+        "anthropic": {"ANTHROPIC_API_KEY": status("ANTHROPIC_API_KEY")},
+        "postmark": {
+            "POSTMARK_SERVER_TOKEN": status("POSTMARK_SERVER_TOKEN"),
+            "POSTMARK_FROM_EMAIL": status("POSTMARK_FROM_EMAIL"),
+        },
+        "slack": {"SLACK_WEBHOOK_URL": status("SLACK_WEBHOOK_URL")},
+        "environment": status("ENVIRONMENT"),
+    }
+
+
 @router.get("/schedule")
 def schedule_status() -> dict[str, Any]:
     """Lister scheduler-jobs og deres trigger-konfig."""

@@ -11,7 +11,7 @@ from sqlmodel import Session, func, select
 
 from app.auth import require_basic_auth
 from app.db import get_session
-from app.models import CompanyEvent, Competitor, JobPosting, Signal
+from app.models import CompanyEvent, Competitor, JobPosting, Report, Signal
 
 router = APIRouter(prefix="/api", tags=["public"], dependencies=[Depends(require_basic_auth)])
 
@@ -138,6 +138,23 @@ def list_events(
             "detected_at": e.detected_at.isoformat(),
         }
         for e, c in rows
+    ]
+
+
+@router.get("/reports")
+def list_reports(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    rows = list(session.exec(select(Report).order_by(Report.generated_at.desc())).all())  # type: ignore[union-attr]
+    return [
+        {
+            "week": r.week,
+            "status": r.status,
+            "signal_count": r.signal_count,
+            "data_points": r.data_points,
+            "exec_summary": r.exec_summary,
+            "generated_at": r.generated_at.isoformat(),
+            "sent_at": r.sent_at.isoformat() if r.sent_at else None,
+        }
+        for r in rows
     ]
 
 
