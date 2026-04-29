@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Epico konkurrenttracker</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 1100px; margin: 0 auto; padding: 24px; color: #1a1a1a; }
+    h1 { margin: 0 0 4px; }
+    .subtitle { color: #666; margin-bottom: 32px; font-size: 14px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+    .stat { background: #f5f5f5; padding: 16px; border-radius: 8px; }
+    .stat-value { font-size: 28px; font-weight: 600; }
+    .stat-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #ddd; }
+    .tab { padding: 8px 16px; cursor: pointer; border: none; background: none; font-size: 14px; }
+    .tab.active { border-bottom: 2px solid #b41018; color: #b41018; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { background: #fafafa; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; color: #666; }
+    .severity { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+    .severity-urgent { background: #ffe5e5; color: #b41018; }
+    .severity-signal { background: #fff4e5; color: #b46010; }
+    .severity-opportunity { background: #e5f7e5; color: #1a7a1a; }
+    .filters { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+    .filters select, .filters input { padding: 6px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+    .empty { text-align: center; color: #888; padding: 40px; font-style: italic; }
+    a { color: #b41018; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>Epico konkurrenttracker</h1>
+  <p class="subtitle">Live overblik over signaler, jobopslag og firma-events fra de aktive konkurrenter.</p>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="signals">Signaler</button>
+    <button class="tab" data-tab="jobs">Jobopslag</button>
+    <button class="tab" data-tab="events">Firma-events</button>
+  </div>
+
+  <div class="filters">
+    <label>Konkurrent: <select id="competitor-filter"><option value="">Alle</option></select></label>
+    <span id="extra-filters"></span>
+  </div>
+
+  <div id="content"></div>
+
+  <script>
+    const state = { tab: "signals", competitor: "", competitors: [] };
+
+    async function fetchJSON(path) {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`${path}: ${res.status}`);
+      return res.json();
+    }
+
+    function renderStats(s) {
+      document.getElementById("stats").innerHTML = `
+        <div class="stat"><div class="stat-value">${s.competitors}</div><div class="stat-label">Aktive konkurrenter</div></div>
+        <div class="stat"><div class="stat-value">${s.jobs_last_7d}</div><div class="stat-label">Job sidste 7 dage</div></div>
+        <div class="stat"><div class="stat-value">${s.events_last_7d}</div><div class="stat-label">Events sidste 7 dage</div></div>
+        <div class="stat"><div class="stat-value">${s.signals_total}</div><div class="stat-label">Signaler i alt (${s.latest_signal_week || "-"})</div></div>
+      `;
+    }
+
+    function renderSignals(rows) {
+      if (!rows.length) return `<div class="empty">Ingen signaler endnu. Koer POST /admin/analyze/synthesize.</div>`;
+      return `<table><thead><tr><th>Uge</th><th>Konkurrent</th><th>Severity</th><th>Titel</th><th>Action</th><th>Owner</th></tr></thead><tbody>
+        ${rows.map(s => `<tr>
+          <td>${s.week}</td>
+          <td>${s.competitor.name}</td>
+          <td><span class="severity severity-${s.severity}">${s.severity}</span></td>
+          <td><strong>${s.title}</strong><br><span style="color:#666;font-size:13px">${s.summary}</span></td>
+          <td>${s.recommended_action || "-"}</td>
+          <td>${s.recommended_owner || "-"}</td>
+        </tr>`).join("")}
+      </tbody></table>`;
+    }
+
+    function renderJobs(rows) {
+      if (!rows.length) return `<div class="empty">Ingen jobopslag i perioden.</div>`;
+      return `<table><thead><tr><th>Konkurrent</th><th>Titel</th><th>Kategori</th><th>Seniority</th><th>Kilde</th><th>Set</th></tr></thead><tbody>
+        ${rows.map(j => `<tr>
+          <td>${j.competitor.name}</td>
+          <td>${j.url ? `<a href="${j.url}" target="_blank">${j.title}</a>` : j.title}</td>
+          <td>${j.category || "-"}</td>
+          <td>${j.seniority || "-"}</td>
+          <td>${j.source}</td>
+          <td>${j.first_seen_at.slice(0, 10)}</td>
+        </tr>`).join("")}
+      </tbody></table>`;
+    }
+
+    function renderEvents(rows) {
+      if (!rows.length) return `<div class="empty">Ingen events i perioden.</div>`;
+      return `<table><thead><tr><th>Konkurrent</th><th>Type</th><th>Titel</th><th>Kilde</th><th>Set</th></tr></thead><tbody>
+        ${rows.map(e => `<tr>
+          <td>${e.competitor.name}</td>
+          <td>${e.event_type}</td>
+          <td>${e.url ? `<a href="${e.url}" target="_blank">${e.title}</a>` : e.title}<br><span style="color:#666;font-size:13px">${e.description || ""}</span></td>
+          <td>${e.source}</td>
+          <td>${e.detected_at.slice(0, 10)}</td>
+        </tr>`).join("")}
+      </tbody></table>`;
+    }
+
+    async function refresh() {
+      const params = state.competitor ? `?competitor=${encodeURIComponent(state.competitor)}` : "";
+      const path = { signals: "/api/signals", jobs: "/api/jobs", events: "/api/events" }[state.tab];
+      const renderer = { signals: renderSignals, jobs: renderJobs, events: renderEvents }[state.tab];
+      try {
+        const data = await fetchJSON(`${path}${params}`);
+        document.getElementById("content").innerHTML = renderer(data);
+      } catch (err) {
+        document.getElementById("content").innerHTML = `<div class="empty">Fejl: ${err.message}</div>`;
+      }
+    }
+
+    async function init() {
+      try {
+        const [stats, competitors] = await Promise.all([fetchJSON("/api/stats"), fetchJSON("/api/competitors")]);
+        renderStats(stats);
+        state.competitors = competitors;
+        const sel = document.getElementById("competitor-filter");
+        competitors.forEach(c => sel.innerHTML += `<option value="${c.slug}">${c.name}</option>`);
+        sel.addEventListener("change", e => { state.competitor = e.target.value; refresh(); });
+        document.querySelectorAll(".tab").forEach(t => {
+          t.addEventListener("click", e => {
+            document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+            e.target.classList.add("active");
+            state.tab = e.target.dataset.tab;
+            refresh();
+          });
+        });
+        refresh();
+      } catch (err) {
+        document.body.innerHTML = `<h1>Login kraevet</h1><p>Reload siden og indtast brugernavn/password.</p><pre>${err.message}</pre>`;
+      }
+    }
+    init();
+  </script>
+</body>
+</html>

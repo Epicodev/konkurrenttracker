@@ -11,6 +11,7 @@ from sqlmodel import Session, func, select
 
 from app.analysis.classifier import classify_pending
 from app.analysis.synthesizer import synthesize_week
+from app.auth import require_basic_auth
 from app.db import get_session
 from app.models import CompanyEvent, Competitor, JobPosting, Signal
 from app.scrapers.career_sites import CareerSiteScraper
@@ -19,7 +20,7 @@ from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
 from app.scrapers.wayback import WaybackScraper
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_basic_auth)])
 
 
 @router.get("/schedule")
