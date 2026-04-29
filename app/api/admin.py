@@ -11,9 +11,11 @@ from sqlmodel import Session, func, select
 
 from app.db import get_session
 from app.models import CompanyEvent, Competitor, JobPosting
+from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
 from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
+from app.scrapers.wayback import WaybackScraper
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -108,3 +110,27 @@ def trigger_cvr_scrape(session: Session = Depends(get_session)) -> dict[str, Any
 def trigger_google_news_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
     """Manuel trigger - koerer Google News-scraperen synkront for alle aktive konkurrenter."""
     return _run_scraper(GoogleNewsScraper(), "google_news", session)
+
+
+@router.post("/scrape/career_sites")
+def trigger_career_sites_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - koerer karriere-side scraperen for alle aktive konkurrenter med career_url."""
+    return _run_scraper(CareerSiteScraper(), "career_page", session)
+
+
+@router.post("/scrape/wayback")
+def trigger_wayback_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - koerer wayback (web-snapshot) scraperen for alle aktive konkurrenter."""
+    return _run_scraper(WaybackScraper(), "wayback", session)
+
+
+@router.post("/scrape/all")
+def trigger_all_scrapers(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - koerer alle 5 scrapere sekventielt. Bruges til ad-hoc rapport-trigger."""
+    return {
+        "jobindex": _run_scraper(JobindexScraper(), "jobindex", session),
+        "cvr": _run_scraper(CvrScraper(), "cvr", session),
+        "google_news": _run_scraper(GoogleNewsScraper(), "google_news", session),
+        "career_sites": _run_scraper(CareerSiteScraper(), "career_page", session),
+        "wayback": _run_scraper(WaybackScraper(), "wayback", session),
+    }
