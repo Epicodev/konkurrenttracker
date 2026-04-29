@@ -9,8 +9,10 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, func, select
 
+from app.analysis.classifier import classify_pending
+from app.analysis.synthesizer import synthesize_week
 from app.db import get_session
-from app.models import CompanyEvent, Competitor, JobPosting
+from app.models import CompanyEvent, Competitor, JobPosting, Signal
 from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
 from app.scrapers.google_news import GoogleNewsScraper
@@ -84,10 +86,20 @@ def data_status(session: Session = Depends(get_session)) -> dict[str, Any]:
     competitors_with_cvr = session.exec(
         select(func.count()).select_from(Competitor).where(Competitor.cvr.is_not(None))  # type: ignore[union-attr]
     ).one()
+    signals_total = session.exec(select(func.count()).select_from(Signal)).one()
+    latest_signal_week = session.exec(select(func.max(Signal.week))).one()
+    classified_jobs = session.exec(
+        select(func.count()).select_from(JobPosting).where(JobPosting.category.is_not(None))  # type: ignore[union-attr]
+    ).one()
 
     return {
         "competitors": {"total": competitors_total, "active": competitors_active, "with_cvr": competitors_with_cvr},
         "sources": sources,
+        "analysis": {
+            "signals_total": signals_total,
+            "latest_signal_week": latest_signal_week,
+            "classified_jobs": classified_jobs,
+        },
     }
 
 
@@ -153,3 +165,46 @@ def trigger_all_scrapers(session: Session = Depends(get_session)) -> dict[str, A
         "career_sites": _run_scraper(CareerSiteScraper(), "career_page", session),
         "wayback": _run_scraper(WaybackScraper(), "wayback", session),
     }
+
+
+@router.post("/analyze/classify")
+def trigger_classify(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - klassificer pending jobopslag med Haiku."""
+    return classify_pending(session)
+
+
+@router.post("/analyze/synthesize")
+def trigger_synthesize(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - generer ugentlig syntese med Sonnet."""
+    classify_pending(session)
+    return synthesize_week(session)
+
+
+@router.get("/signals/latest")
+def latest_signals(session: Session = Depends(get_session), limit: int = 20) -> list[dict[str, Any]]:
+    """Seneste signaler i omvendt kronologisk orden."""
+    rows = list(
+        session.exec(
+            select(Signal, Competitor)
+            .join(Competitor, Signal.competitor_id == Competitor.id)
+            .order_by(Signal.created_at.desc())  # type: ignore[union-attr]
+            .limit(limit)
+        ).all()
+    )
+    return [
+        {
+            "id": s.id,
+            "week": s.week,
+            "competitor": {"slug": c.slug, "name": c.name},
+            "domain": s.domain,
+            "severity": s.severity,
+            "title": s.title,
+            "summary": s.summary,
+            "recommended_action": s.recommended_action,
+            "recommended_owner": s.recommended_owner,
+            "confidence": s.confidence,
+            "source_refs": s.source_refs,
+            "created_at": s.created_at.isoformat(),
+        }
+        for s, c in rows
+    ]

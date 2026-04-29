@@ -15,6 +15,8 @@ from sqlmodel import Session, select
 from app.db import engine
 from app.models import Competitor
 from app.notifications import slack_alert
+from app.analysis.classifier import classify_pending
+from app.analysis.synthesizer import synthesize_week
 from app.scrapers.base import Scraper, ScrapeResult
 from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
@@ -60,7 +62,35 @@ def _wrap(scraper: Scraper) -> callable:  # type: ignore[type-arg]
     return job
 
 
-# Tidsplan jf. udviklingsplan sektion 06 (alle tider er UTC = DK-tid - 2 om sommeren)
+def _classify_job() -> None:
+    from sqlmodel import Session
+
+    from app.db import engine
+
+    logger.info("cron.classify.start")
+    with Session(engine) as session:
+        result = classify_pending(session)
+    logger.info("cron.classify.done", **result)
+
+
+def _synthesize_job() -> None:
+    from sqlmodel import Session
+
+    from app.db import engine
+
+    logger.info("cron.synthesize.start")
+    with Session(engine) as session:
+        # Klassificer foerst, saa Sonnet faar bedst muligt input
+        classify_pending(session)
+        result = synthesize_week(session)
+    logger.info("cron.synthesize.done", **result)
+    if result.get("signals_added", 0) == 0:
+        slack_alert(
+            f"⚠️ Ugentlig syntese gav 0 signaler. Reason: {result.get('reason', 'ukendt')}"
+        )
+
+
+# Tidsplan jf. udviklingsplan sektion 06
 SCHEDULE = [
     (JobindexScraper(), CronTrigger(hour=2, minute=0)),
     (CareerSiteScraper(), CronTrigger(hour=2, minute=30)),
@@ -84,4 +114,20 @@ def build_scheduler() -> BackgroundScheduler:
             name=f"Scrape {scraper.source}",
             replace_existing=True,
         )
+    # Haiku-klassificering dagligt 04:00 (efter de 4 daglige scrapere er faerdige)
+    scheduler.add_job(
+        _classify_job,
+        trigger=CronTrigger(hour=4, minute=0),
+        id="classify_pending",
+        name="Klassificer nye jobopslag (Haiku)",
+        replace_existing=True,
+    )
+    # Sonnet-syntese soendag 22:00 (efter wayback har koert)
+    scheduler.add_job(
+        _synthesize_job,
+        trigger=CronTrigger(day_of_week="sun", hour=22, minute=0),
+        id="synthesize_weekly",
+        name="Ugentlig syntese (Sonnet)",
+        replace_existing=True,
+    )
     return scheduler
