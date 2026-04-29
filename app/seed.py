@@ -15,19 +15,22 @@ from app.models import Competitor
 COMPETITORS: list[dict[str, Any]] = [
     {
         "slug": "prodata",
-        "name": "ProData Consult A/S",
+        "name": "ProData Consult A/S (nu emagine Consulting A/S)",
+        "cvr": "26249627",
         "active": True,
         "scraper_config": {"jobindex": {"query": "ProData"}},
     },
     {
         "slug": "right-people",
-        "name": "Right People Group",
+        "name": "Right People Group ApS",
+        "cvr": "30590627",
         "active": True,
         "scraper_config": {"jobindex": {"query": "Right People"}},
     },
     {
         "slug": "hays",
-        "name": "Hays Denmark",
+        "name": "Hays Specialist Recruitment Denmark A/S",
+        "cvr": "30908848",
         "active": True,
         "scraper_config": {"jobindex": {"query": "Hays"}},
     },
