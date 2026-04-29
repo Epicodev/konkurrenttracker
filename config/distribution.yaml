@@ -1,0 +1,14 @@
+# Distributionsliste til ugentlig PDF-rapport.
+# Tilfoej / fjern modtagere uden at roere koden.
+
+recipients:
+  - email: bvb@epico.dk
+    name: Benjamin
+    role: ceo
+  # Tilfoej fx:
+  # - email: salg@epico.dk
+  #   name: Salgsteamet
+  #   role: sales
+  # - email: marketing@epico.dk
+  #   name: Marketingteamet
+  #   role: marketing

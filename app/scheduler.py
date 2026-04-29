@@ -17,6 +17,7 @@ from app.models import Competitor
 from app.notifications import slack_alert
 from app.analysis.classifier import classify_pending
 from app.analysis.synthesizer import synthesize_week
+from app.jobs.deliver_weekly import deliver
 from app.scrapers.base import Scraper, ScrapeResult
 from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
@@ -130,4 +131,20 @@ def build_scheduler() -> BackgroundScheduler:
         name="Ugentlig syntese (Sonnet)",
         replace_existing=True,
     )
+    # Mandag 07:00 - byg + send PDF-rapport
+    scheduler.add_job(
+        _deliver_job,
+        trigger=CronTrigger(day_of_week="mon", hour=7, minute=0),
+        id="deliver_weekly",
+        name="Send ugentlig PDF-rapport (Postmark)",
+        replace_existing=True,
+    )
     return scheduler
+
+
+def _deliver_job() -> None:
+    logger.info("cron.deliver.start")
+    result = deliver()
+    logger.info("cron.deliver.done", **result)
+    if result.get("mail", {}).get("failed", 0) > 0:
+        slack_alert(f"⚠️ Ugens rapport fejlede til {result['mail']['failed']} modtager(e)")

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<title>Epico konkurrent-rapport · uge {{ week }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 24mm 18mm;
+    @bottom-right { content: "Side " counter(page) " af " counter(pages); font-size: 9pt; color: #999; }
+    @bottom-left { content: "Epico · konkurrenttracker · uge {{ week }}"; font-size: 9pt; color: #999; }
+  }
+  body { font-family: "Helvetica", "Arial", sans-serif; color: #1a1a1a; font-size: 10pt; line-height: 1.5; }
+  h1 { color: #b41018; font-size: 24pt; margin: 0 0 4pt; }
+  h2 { color: #b41018; font-size: 16pt; margin: 32pt 0 8pt; border-bottom: 1px solid #b41018; padding-bottom: 4pt; }
+  h3 { font-size: 12pt; margin: 16pt 0 4pt; }
+  .cover { page-break-after: always; padding-top: 80pt; }
+  .cover .tagline { font-size: 14pt; color: #666; margin-top: 12pt; }
+  .stats { display: flex; gap: 8pt; margin: 20pt 0; }
+  .stat { flex: 1; background: #f5f5f5; padding: 12pt; border-radius: 4pt; text-align: center; }
+  .stat-value { font-size: 22pt; font-weight: 700; color: #b41018; }
+  .stat-label { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5pt; color: #666; }
+  .stat-delta { font-size: 9pt; color: #888; margin-top: 2pt; }
+  .signal { border-left: 4pt solid #b41018; padding: 8pt 12pt; margin: 12pt 0; background: #fafafa; page-break-inside: avoid; }
+  .signal.urgent { border-left-color: #b41018; background: #fff1f1; }
+  .signal.signal { border-left-color: #b48010; background: #fff8ec; }
+  .signal.opportunity { border-left-color: #1a7a1a; background: #f1faf1; }
+  .signal-meta { font-size: 9pt; color: #666; margin-bottom: 4pt; }
+  .signal-title { font-weight: 700; margin-bottom: 4pt; }
+  .signal-action { background: white; padding: 6pt 10pt; border-radius: 3pt; margin-top: 6pt; font-size: 9pt; }
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; }
+  th, td { padding: 4pt 6pt; text-align: left; border-bottom: 1px solid #eee; font-size: 9pt; }
+  th { background: #fafafa; font-weight: 600; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.3pt; }
+  .muted { color: #888; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <h1>Konkurrentovervaagning</h1>
+  <div class="tagline">Uge {{ week }} · {{ generated_date }}</div>
+  {% if top_tagline %}<p style="margin-top:40pt;font-size:13pt">{{ top_tagline }}</p>{% endif %}
+</section>
+
+<h2>Executive summary</h2>
+<p>I uge {{ week }} blev der registreret <strong>{{ stats.jobs_last_7d }}</strong> nye jobopslag og <strong>{{ stats.events_last_7d }}</strong> firma-events fordelt paa {{ stats.competitors }} konkurrenter. Claude har udvalgt <strong>{{ signals|length }}</strong> prioriterede signaler.</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-value">{{ stats.jobs_last_7d }}</div><div class="stat-label">Jobopslag</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.events_last_7d }}</div><div class="stat-label">Firma-events</div></div>
+  <div class="stat"><div class="stat-value">{{ signals|length }}</div><div class="stat-label">Signaler</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.competitors }}</div><div class="stat-label">Konkurrenter</div></div>
+</div>
+
+{% if signals %}
+{% for signal in signals %}
+<div class="signal {{ signal.severity }}">
+  <div class="signal-meta">{{ signal.competitor.name }} · {{ signal.domain }} · severity: {{ signal.severity }} · confidence: {{ signal.confidence }}</div>
+  <div class="signal-title">{{ signal.title }}</div>
+  <div>{{ signal.summary }}</div>
+  {% if signal.recommended_action %}
+  <div class="signal-action">
+    <strong>Anbefalet handling{% if signal.recommended_owner %} ({{ signal.recommended_owner }}){% endif %}:</strong> {{ signal.recommended_action }}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p class="muted">Ingen signaler i denne uge.</p>
+{% endif %}
+
+<h2>Domaene 01 · Jobopslag</h2>
+{% if jobs_by_competitor %}
+<table>
+  <thead><tr><th>Konkurrent</th><th>Antal</th><th>Top kategorier</th><th>Senior/Junior</th></tr></thead>
+  <tbody>
+  {% for c in jobs_by_competitor %}
+  <tr>
+    <td>{{ c.name }}</td>
+    <td>{{ c.count }}</td>
+    <td>{{ c.top_categories | join(", ") }}</td>
+    <td>{{ c.senior_count }} / {{ c.junior_count }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Ingen jobopslag i ugen.</p>
+{% endif %}
+
+<h2>Domaene 02 · Firmaaendringer</h2>
+{% if recent_events %}
+<table>
+  <thead><tr><th>Dato</th><th>Konkurrent</th><th>Type</th><th>Beskrivelse</th></tr></thead>
+  <tbody>
+  {% for e in recent_events %}
+  <tr>
+    <td>{{ e.detected_date }}</td>
+    <td>{{ e.competitor_name }}</td>
+    <td>{{ e.event_type }}</td>
+    <td>{{ e.title }}{% if e.description %}<br><span class="muted">{{ e.description }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Ingen firma-events i ugen.</p>
+{% endif %}
+
+<h2>Domaene 03 · Web &amp; sentiment</h2>
+{% if web_changes %}
+<ul>
+{% for w in web_changes %}<li><strong>{{ w.competitor_name }}</strong>: {{ w.title }}<br><span class="muted">{{ w.description }}</span></li>{% endfor %}
+</ul>
+{% else %}
+<p class="muted">Ingen web-aendringer registreret i ugen.</p>
+{% endif %}
+
+</body>
+</html>

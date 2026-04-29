@@ -13,7 +13,10 @@ from app.analysis.classifier import classify_pending
 from app.analysis.synthesizer import synthesize_week
 from app.auth import require_basic_auth
 from app.db import get_session
-from app.models import CompanyEvent, Competitor, JobPosting, Signal
+from app.jobs.deliver_weekly import deliver
+from app.models import CompanyEvent, Competitor, JobPosting, Report, Signal
+from app.reporting.builder import build_payload
+from app.reporting.pdf import render_html
 from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
 from app.scrapers.google_news import GoogleNewsScraper
@@ -179,6 +182,39 @@ def trigger_synthesize(session: Session = Depends(get_session)) -> dict[str, Any
     """Manuel trigger - generer ugentlig syntese med Sonnet."""
     classify_pending(session)
     return synthesize_week(session)
+
+
+@router.post("/report/build")
+def trigger_build_report(week: str | None = None) -> dict[str, Any]:
+    """Manuel trigger - byg + send ugens rapport. ?week=2026-W17 for specifik uge."""
+    return deliver(week=week)
+
+
+@router.get("/report/preview", response_class=None)
+def preview_report_html(session: Session = Depends(get_session), week: str | None = None) -> Any:
+    """HTML-preview af rapporten uden PDF-rendering. Bruges til at iterere paa template."""
+    from fastapi.responses import HTMLResponse
+
+    payload = build_payload(session, week=week)
+    return HTMLResponse(content=render_html("weekly_report.html", payload))
+
+
+@router.get("/reports")
+def list_reports(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    """Liste over alle genererede rapporter."""
+    rows = list(session.exec(select(Report).order_by(Report.generated_at.desc())).all())  # type: ignore[union-attr]
+    return [
+        {
+            "week": r.week,
+            "status": r.status,
+            "signal_count": r.signal_count,
+            "data_points": r.data_points,
+            "exec_summary": r.exec_summary,
+            "generated_at": r.generated_at.isoformat(),
+            "sent_at": r.sent_at.isoformat() if r.sent_at else None,
+        }
+        for r in rows
+    ]
 
 
 @router.get("/signals/latest")
