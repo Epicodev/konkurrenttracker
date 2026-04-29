@@ -12,6 +12,7 @@ from sqlmodel import Session, func, select
 from app.db import get_session
 from app.models import CompanyEvent, Competitor, JobPosting
 from app.scrapers.cvr import CvrScraper
+from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -101,3 +102,9 @@ def trigger_jobindex_scrape(session: Session = Depends(get_session)) -> dict[str
 def trigger_cvr_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
     """Manuel trigger - koerer CVR-scraperen synkront for alle aktive konkurrenter med CVR-nummer."""
     return _run_scraper(CvrScraper(), "cvr", session)
+
+
+@router.post("/scrape/google_news")
+def trigger_google_news_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - koerer Google News-scraperen synkront for alle aktive konkurrenter."""
+    return _run_scraper(GoogleNewsScraper(), "google_news", session)
