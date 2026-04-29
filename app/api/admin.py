@@ -20,6 +20,25 @@ from app.scrapers.wayback import WaybackScraper
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+@router.get("/schedule")
+def schedule_status() -> dict[str, Any]:
+    """Lister scheduler-jobs og deres trigger-konfig."""
+    from datetime import datetime
+
+    from app.scheduler import SCHEDULE
+
+    now = datetime.now()
+    jobs = [
+        {
+            "id": f"scrape_{scraper.source}",
+            "trigger": str(trigger),
+            "next_run_local": str(trigger.get_next_fire_time(None, now)),
+        }
+        for scraper, trigger in SCHEDULE
+    ]
+    return {"jobs": jobs}
+
+
 @router.get("/data-status")
 def data_status(session: Session = Depends(get_session)) -> dict[str, Any]:
     """Status pr. scraper-kilde: total antal, sidste-set timestamp, antal sidste 24t."""
