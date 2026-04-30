@@ -91,14 +91,26 @@ def _synthesize_job() -> None:
         )
 
 
-# Tidsplan jf. udviklingsplan sektion 06
-SCHEDULE = [
-    (JobindexScraper(), CronTrigger(hour=2, minute=0)),
-    (CareerSiteScraper(), CronTrigger(hour=2, minute=30)),
-    (CvrScraper(), CronTrigger(hour=3, minute=0)),
-    (GoogleNewsScraper(), CronTrigger(hour=3, minute=30)),
-    # Wayback koerer ugentligt soendag aften jf. plan sektion 06
-    (WaybackScraper(), CronTrigger(day_of_week="sun", hour=21, minute=0)),
+def _deliver_job() -> None:
+    logger.info("cron.deliver.start")
+    result = deliver()
+    logger.info("cron.deliver.done", **result)
+    if result.get("mail", {}).get("failed", 0) > 0:
+        slack_alert(f"⚠️ Ugens rapport fejlede til {result['mail']['failed']} modtager(e)")
+
+
+# Single source of truth for alle scheduler-jobs jf. udviklingsplan sektion 06.
+# (id, name, callable_factory, trigger). callable_factory tager ingen args og returnerer
+# det callable scheduler skal koere - vi bruger lambda saa scrapere kan instantieres lazy.
+JOB_CONFIGS: list[tuple[str, str, callable, CronTrigger]] = [  # type: ignore[type-arg]
+    ("scrape_jobindex", "Scrape Jobindex", lambda: _wrap(JobindexScraper()), CronTrigger(hour=2, minute=0)),
+    ("scrape_career_page", "Scrape karriere-sider", lambda: _wrap(CareerSiteScraper()), CronTrigger(hour=2, minute=30)),
+    ("scrape_cvr", "Scrape CVR", lambda: _wrap(CvrScraper()), CronTrigger(hour=3, minute=0)),
+    ("scrape_google_news", "Scrape Google News", lambda: _wrap(GoogleNewsScraper()), CronTrigger(hour=3, minute=30)),
+    ("classify_pending", "Klassificer nye jobopslag (Haiku)", lambda: _classify_job, CronTrigger(hour=4, minute=0)),
+    ("scrape_wayback", "Scrape Wayback (web-snapshots)", lambda: _wrap(WaybackScraper()), CronTrigger(day_of_week="sun", hour=21, minute=0)),
+    ("synthesize_weekly", "Ugentlig syntese (Sonnet)", lambda: _synthesize_job, CronTrigger(day_of_week="sun", hour=22, minute=0)),
+    ("deliver_weekly", "Send ugentlig PDF-rapport (Postmark)", lambda: _deliver_job, CronTrigger(day_of_week="mon", hour=7, minute=0)),
 ]
 
 
@@ -107,44 +119,12 @@ def build_scheduler() -> BackgroundScheduler:
         timezone="Europe/Copenhagen",
         job_defaults={"coalesce": True, "misfire_grace_time": 1800, "max_instances": 1},
     )
-    for scraper, trigger in SCHEDULE:
+    for job_id, name, fn_factory, trigger in JOB_CONFIGS:
         scheduler.add_job(
-            _wrap(scraper),
+            fn_factory(),
             trigger=trigger,
-            id=f"scrape_{scraper.source}",
-            name=f"Scrape {scraper.source}",
+            id=job_id,
+            name=name,
             replace_existing=True,
         )
-    # Haiku-klassificering dagligt 04:00 (efter de 4 daglige scrapere er faerdige)
-    scheduler.add_job(
-        _classify_job,
-        trigger=CronTrigger(hour=4, minute=0),
-        id="classify_pending",
-        name="Klassificer nye jobopslag (Haiku)",
-        replace_existing=True,
-    )
-    # Sonnet-syntese soendag 22:00 (efter wayback har koert)
-    scheduler.add_job(
-        _synthesize_job,
-        trigger=CronTrigger(day_of_week="sun", hour=22, minute=0),
-        id="synthesize_weekly",
-        name="Ugentlig syntese (Sonnet)",
-        replace_existing=True,
-    )
-    # Mandag 07:00 - byg + send PDF-rapport
-    scheduler.add_job(
-        _deliver_job,
-        trigger=CronTrigger(day_of_week="mon", hour=7, minute=0),
-        id="deliver_weekly",
-        name="Send ugentlig PDF-rapport (Postmark)",
-        replace_existing=True,
-    )
     return scheduler
-
-
-def _deliver_job() -> None:
-    logger.info("cron.deliver.start")
-    result = deliver()
-    logger.info("cron.deliver.done", **result)
-    if result.get("mail", {}).get("failed", 0) > 0:
-        slack_alert(f"⚠️ Ugens rapport fejlede til {result['mail']['failed']} modtager(e)")

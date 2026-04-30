@@ -59,19 +59,20 @@ def config_check() -> dict[str, Any]:
 
 @router.get("/schedule")
 def schedule_status() -> dict[str, Any]:
-    """Lister scheduler-jobs og deres trigger-konfig."""
+    """Lister alle scheduler-jobs og deres trigger-konfig."""
     from datetime import datetime
 
-    from app.scheduler import SCHEDULE
+    from app.scheduler import JOB_CONFIGS
 
     now = datetime.now()
     jobs = [
         {
-            "id": f"scrape_{scraper.source}",
+            "id": job_id,
+            "name": name,
             "trigger": str(trigger),
             "next_run_local": str(trigger.get_next_fire_time(None, now)),
         }
-        for scraper, trigger in SCHEDULE
+        for job_id, name, _factory, trigger in JOB_CONFIGS
     ]
     return {"jobs": jobs}
 
