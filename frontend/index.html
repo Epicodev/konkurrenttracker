@@ -127,15 +127,45 @@
       }
     }
 
+    function summarizeResult(label, data) {
+      // Pretty-print de mest relevante felter afhaengigt af hvilket endpoint der blev kaldt
+      if (data.results) {
+        const total = data.total_added;
+        return `${label}: ${total} ny(e) tilfoejet (${data.competitors_processed} konkurrenter)`;
+      }
+      if (data.signals_added !== undefined) {
+        return `${label}: ${data.signals_added} signaler tilfoejet${data.reason ? ` (${data.reason})` : ""}`;
+      }
+      if (data.pdf_size_kb !== undefined) {
+        const mailInfo = data.mail.skipped ? `(mail skipped: ${data.mail.reason})` : `(mail sendt til ${data.mail.sent})`;
+        return `${label}: ${data.pdf_size_kb} KB PDF, ${data.signal_count} signaler, ${data.data_points} data-punkter ${mailInfo}`;
+      }
+      // Hvis det er all-scraper response, summer hver kilde
+      const sources = Object.entries(data).filter(([k, v]) => v && v.competitors_processed !== undefined);
+      if (sources.length) {
+        return `${label}: ` + sources.map(([k, v]) => `${k}=${v.total_added}`).join(", ");
+      }
+      return `${label} faerdig`;
+    }
+
+    async function refreshStats() {
+      try {
+        const stats = await fetchJSON("/api/stats");
+        renderStats(stats);
+      } catch (err) {
+        // Ignore - stats er ikke kritisk
+      }
+    }
+
     async function triggerAction(label, path) {
       const status = document.getElementById("action-status");
-      status.textContent = `${label} koerer...`;
+      status.textContent = `${label} koerer... (kan tage 30-60 sek)`;
       try {
         const res = await fetch(path, { method: "POST" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        status.textContent = `${label} faerdig: ${JSON.stringify(data).slice(0, 200)}`;
-        setTimeout(() => refresh(), 500);
+        status.textContent = summarizeResult(label, data);
+        await Promise.all([refreshStats(), refresh()]);
       } catch (err) {
         status.textContent = `${label} fejlede: ${err.message}`;
       }
