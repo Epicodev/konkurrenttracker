@@ -37,7 +37,7 @@
   <div style="margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
     <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Koer alle scrapere</button>
     <button id="btn-synthesize" style="padding: 8px 14px; background: #b41018; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer signaler (Sonnet)</button>
-    <button id="btn-report" style="padding: 8px 14px; background: #0066cc; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer rapport nu</button>
+    <button id="btn-report" style="padding: 8px 14px; background: #0066cc; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent rapport som PDF</button>
     <span id="action-status" style="font-size: 13px; color: #666; margin-left: 8px;"></span>
   </div>
 
@@ -47,6 +47,7 @@
     <button class="tab active" data-tab="signals">Signaler</button>
     <button class="tab" data-tab="jobs">Jobopslag</button>
     <button class="tab" data-tab="events">Firma-events</button>
+    <button class="tab" data-tab="reports">Rapporter</button>
   </div>
 
   <div class="filters">
@@ -115,12 +116,49 @@
       </tbody></table>`;
     }
 
+    function renderReports(rows) {
+      const downloadBtn = (week) => `<a href="/admin/report/download?week=${encodeURIComponent(week)}" style="display:inline-block;padding:4px 10px;background:#0066cc;color:white;text-decoration:none;border-radius:3px;font-size:12px;">Download PDF</a>`;
+      if (!rows.length) {
+        return `<div class="empty">
+          Ingen rapporter genereret endnu. Klik "Hent rapport som PDF" oeverst for at generere ugens rapport,
+          eller brug knappen herunder til at hente specifikke uger.<br><br>
+          ${downloadBtn(currentWeek())}
+        </div>`;
+      }
+      return `<table><thead><tr><th>Uge</th><th>Status</th><th>Signaler</th><th>Data-punkter</th><th>Top tagline</th><th>Genereret</th><th>Download</th></tr></thead><tbody>
+        ${rows.map(r => `<tr>
+          <td>${r.week}</td>
+          <td>${r.status}</td>
+          <td>${r.signal_count ?? "-"}</td>
+          <td>${r.data_points ?? "-"}</td>
+          <td style="max-width:400px"><span style="color:#666;font-size:13px">${r.exec_summary || "-"}</span></td>
+          <td>${r.generated_at.slice(0, 10)}</td>
+          <td>${downloadBtn(r.week)}</td>
+        </tr>`).join("")}
+      </tbody></table>`;
+    }
+
+    function currentWeek() {
+      // Returnerer ISO-uge i format YYYY-Www
+      const now = new Date();
+      const target = new Date(now.valueOf());
+      const dayNr = (now.getDay() + 6) % 7;
+      target.setDate(target.getDate() - dayNr + 3);
+      const firstThursday = target.valueOf();
+      target.setMonth(0, 1);
+      if (target.getDay() !== 4) target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+      const week = 1 + Math.ceil((firstThursday - target) / 604800000);
+      return `${now.getFullYear()}-W${String(week).padStart(2, "0")}`;
+    }
+
     async function refresh() {
       const params = state.competitor ? `?competitor=${encodeURIComponent(state.competitor)}` : "";
-      const path = { signals: "/api/signals", jobs: "/api/jobs", events: "/api/events" }[state.tab];
-      const renderer = { signals: renderSignals, jobs: renderJobs, events: renderEvents }[state.tab];
+      const path = { signals: "/api/signals", jobs: "/api/jobs", events: "/api/events", reports: "/admin/reports" }[state.tab];
+      const renderer = { signals: renderSignals, jobs: renderJobs, events: renderEvents, reports: renderReports }[state.tab];
+      // Reports-tabben filtrerer ikke pr. konkurrent
+      const url = state.tab === "reports" ? path : `${path}${params}`;
       try {
-        const data = await fetchJSON(`${path}${params}`);
+        const data = await fetchJSON(url);
         document.getElementById("content").innerHTML = renderer(data);
       } catch (err) {
         document.getElementById("content").innerHTML = `<div class="empty">Fejl: ${err.message}</div>`;
@@ -181,7 +219,23 @@
         sel.addEventListener("change", e => { state.competitor = e.target.value; refresh(); });
         document.getElementById("btn-scrape").addEventListener("click", () => triggerAction("Scrape", "/admin/scrape/all"));
         document.getElementById("btn-synthesize").addEventListener("click", () => triggerAction("Syntese", "/admin/analyze/synthesize"));
-        document.getElementById("btn-report").addEventListener("click", () => triggerAction("Rapport", "/admin/report/build"));
+        document.getElementById("btn-report").addEventListener("click", () => {
+          const status = document.getElementById("action-status");
+          status.textContent = "Genererer PDF... (kan tage 10-30 sek)";
+          // Programatisk download uden at navigere vaek fra siden
+          const a = document.createElement("a");
+          a.href = `/admin/report/download?week=${currentWeek()}`;
+          a.download = "";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          // Vent paa download starter foer vi opdaterer UI
+          setTimeout(() => {
+            status.textContent = "PDF hentet (tjek din downloads-mappe).";
+            refreshStats();
+            if (state.tab === "reports") refresh();
+          }, 3000);
+        });
         document.querySelectorAll(".tab").forEach(t => {
           t.addEventListener("click", e => {
             document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));

@@ -231,6 +231,47 @@ def preview_report_html(session: Session = Depends(get_session), week: str | Non
     return HTMLResponse(content=render_html("weekly_report.html", payload))
 
 
+@router.get("/report/download", response_class=None)
+def download_report(session: Session = Depends(get_session), week: str | None = None) -> Any:
+    """Generer PDF on-demand og returner som download.
+
+    PDF'en regenereres altid fra nuvaerende DB-state - ingen persistent storage noedvendig.
+    Opdaterer ogsaa Report-row med metadata saa arkivet kan vise tidligere downloads.
+    """
+    from datetime import datetime
+
+    from fastapi.responses import Response
+
+    from app.reporting.pdf import render_pdf
+
+    if week is None:
+        iso_year, iso_week, _ = datetime.utcnow().isocalendar()
+        week = f"{iso_year}-W{iso_week:02d}"
+
+    payload = build_payload(session, week=week)
+    pdf_bytes = render_pdf("weekly_report.html", payload)
+
+    # Opdater eller opret Report-row med metadata (uden pdf_path - vi gemmer ikke til disk)
+    existing = session.exec(select(Report).where(Report.week == week)).first()
+    report = existing or Report(week=week)
+    report.signal_count = len(payload["signals"])
+    report.data_points = payload["stats"]["jobs_last_7d"] + payload["stats"]["events_last_7d"]
+    report.exec_summary = payload.get("top_tagline")
+    if not report.status or report.status == "pending":
+        report.status = "generated"
+    session.add(report)
+    session.commit()
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="epico-uge-{week}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.get("/reports")
 def list_reports(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
     """Liste over alle genererede rapporter."""
