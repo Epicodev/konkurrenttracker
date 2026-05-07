@@ -25,7 +25,7 @@ def require_basic_auth(credentials: HTTPBasicCredentials | None = Depends(securi
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Login kraevet",
-            headers={"WWW-Authenticate": "Basic"},
+            headers={"WWW-Authenticate": 'Basic realm="konkurrenttracker", charset="UTF-8"'},
         )
     user_ok = secrets.compare_digest(credentials.username.encode(), expected_user.encode())
     pass_ok = secrets.compare_digest(credentials.password.encode(), expected_password.encode())
@@ -33,6 +33,6 @@ def require_basic_auth(credentials: HTTPBasicCredentials | None = Depends(securi
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Forkert brugernavn eller password",
-            headers={"WWW-Authenticate": "Basic"},
+            headers={"WWW-Authenticate": 'Basic realm="konkurrenttracker", charset="UTF-8"'},
         )
     return credentials.username
