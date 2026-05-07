@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session, func, select
 
 from app.analysis.classifier import classify_pending
+from app.analysis.geo_tracker import run_geo_pass
 from app.analysis.synthesizer import synthesize_week
 from app.auth import require_basic_auth
 from app.db import get_session
@@ -22,6 +23,7 @@ from app.scrapers.cvr import CvrScraper
 from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
 from app.scrapers.wayback import WaybackScraper
+from app.scrapers.web_intel import WebIntelScraper
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_basic_auth)])
 
@@ -191,15 +193,22 @@ def trigger_wayback_scrape(session: Session = Depends(get_session)) -> dict[str,
     return _run_scraper(WaybackScraper(), "wayback", session)
 
 
+@router.post("/scrape/web_intel")
+def trigger_web_intel_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - tech stack + sitemap-velocity for alle aktive konkurrenter."""
+    return _run_scraper(WebIntelScraper(), "web_intel", session)
+
+
 @router.post("/scrape/all")
 def trigger_all_scrapers(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koerer alle 5 scrapere sekventielt. Bruges til ad-hoc rapport-trigger."""
+    """Manuel trigger - koerer alle 6 scrapere sekventielt. Bruges til ad-hoc rapport-trigger."""
     return {
         "jobindex": _run_scraper(JobindexScraper(), "jobindex", session),
         "cvr": _run_scraper(CvrScraper(), "cvr", session),
         "google_news": _run_scraper(GoogleNewsScraper(), "google_news", session),
         "career_sites": _run_scraper(CareerSiteScraper(), "career_page", session),
         "wayback": _run_scraper(WaybackScraper(), "wayback", session),
+        "web_intel": _run_scraper(WebIntelScraper(), "web_intel", session),
     }
 
 
@@ -214,6 +223,12 @@ def trigger_synthesize(session: Session = Depends(get_session)) -> dict[str, Any
     """Manuel trigger - generer ugentlig syntese med Sonnet."""
     classify_pending(session)
     return synthesize_week(session)
+
+
+@router.post("/analyze/geo")
+def trigger_geo_pass(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - koer GEO share-of-voice maaling mod Claude."""
+    return run_geo_pass(session)
 
 
 @router.post("/report/build")

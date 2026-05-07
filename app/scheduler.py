@@ -13,17 +13,19 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlmodel import Session, select
 
 from app.db import engine
-from app.models import Competitor
 from app.notifications import slack_alert
 from app.analysis.classifier import classify_pending
+from app.analysis.geo_tracker import run_geo_pass
 from app.analysis.synthesizer import synthesize_week
 from app.jobs.deliver_weekly import deliver
+from app.models import Competitor, Signal
 from app.scrapers.base import Scraper, ScrapeResult
 from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
 from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
 from app.scrapers.wayback import WaybackScraper
+from app.scrapers.web_intel import WebIntelScraper
 
 logger = structlog.get_logger(__name__)
 
@@ -75,20 +77,43 @@ def _classify_job() -> None:
 
 
 def _synthesize_job() -> None:
-    from sqlmodel import Session
-
-    from app.db import engine
-
     logger.info("cron.synthesize.start")
     with Session(engine) as session:
         # Klassificer foerst, saa Sonnet faar bedst muligt input
         classify_pending(session)
         result = synthesize_week(session)
+        # Find urgent-signaler i denne uge og post pr. signal til Slack
+        if result.get("signals_added", 0) > 0:
+            week = result.get("week")
+            urgent_rows = list(
+                session.exec(
+                    select(Signal, Competitor)
+                    .join(Competitor, Signal.competitor_id == Competitor.id)
+                    .where(Signal.week == week, Signal.severity == "urgent")
+                ).all()
+            )
+            for signal, competitor in urgent_rows:
+                slack_alert(
+                    f"🚨 *URGENT signal* - {competitor.name}\n"
+                    f"*{signal.title}*\n"
+                    f"{signal.summary[:400]}\n"
+                    f"_Anbefaling:_ {signal.recommended_action or '-'} "
+                    f"(_owner:_ {signal.recommended_owner or '-'})"
+                )
     logger.info("cron.synthesize.done", **result)
     if result.get("signals_added", 0) == 0:
         slack_alert(
             f"⚠️ Ugentlig syntese gav 0 signaler. Reason: {result.get('reason', 'ukendt')}"
         )
+
+
+def _geo_job() -> None:
+    logger.info("cron.geo.start")
+    with Session(engine) as session:
+        result = run_geo_pass(session)
+    logger.info("cron.geo.done", **result)
+    if result.get("competitors_tracked", 0) == 0:
+        slack_alert(f"⚠️ GEO-pass tilfoejede 0 maalinger. Reason: {result.get('reason', 'ukendt')}")
 
 
 def _deliver_job() -> None:
@@ -109,6 +134,8 @@ JOB_CONFIGS: list[tuple[str, str, callable, CronTrigger]] = [  # type: ignore[ty
     ("scrape_google_news", "Scrape Google News", lambda: _wrap(GoogleNewsScraper()), CronTrigger(hour=3, minute=30)),
     ("classify_pending", "Klassificer nye jobopslag (Haiku)", lambda: _classify_job, CronTrigger(hour=4, minute=0)),
     ("scrape_wayback", "Scrape Wayback (web-snapshots)", lambda: _wrap(WaybackScraper()), CronTrigger(day_of_week="sun", hour=21, minute=0)),
+    ("scrape_web_intel", "Scrape web-intel (tech stack + sitemap)", lambda: _wrap(WebIntelScraper()), CronTrigger(day_of_week="sun", hour=21, minute=20)),
+    ("geo_weekly", "GEO share-of-voice (Claude)", lambda: _geo_job, CronTrigger(day_of_week="sun", hour=21, minute=40)),
     ("synthesize_weekly", "Ugentlig syntese (Sonnet)", lambda: _synthesize_job, CronTrigger(day_of_week="sun", hour=22, minute=0)),
     ("deliver_weekly", "Send ugentlig PDF-rapport (Postmark)", lambda: _deliver_job, CronTrigger(day_of_week="mon", hour=7, minute=0)),
 ]

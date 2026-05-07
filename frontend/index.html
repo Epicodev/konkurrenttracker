@@ -42,7 +42,21 @@
     details.info table.info-table { font-size: 12px; margin-top: 6px; }
     details.info table.info-table td { padding: 4px 10px 4px 0; border: 0; vertical-align: top; }
     details.info table.info-table td:first-child { font-weight: 600; white-space: nowrap; color: #b41018; }
+    .chart-card { background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+    .chart-card h3 { margin: 0 0 4px; font-size: 15px; }
+    .chart-card .chart-sub { color: #666; font-size: 12px; margin-bottom: 12px; }
+    .chart-wrap { position: relative; height: 320px; }
+    .geo-bar-wrap { background: #f1f1f1; border-radius: 4px; height: 8px; overflow: hidden; margin-top: 4px; min-width: 120px; }
+    .geo-bar-fill { background: linear-gradient(90deg, #b41018 0%, #d8444b 100%); height: 100%; }
+    .sentiment { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+    .sentiment-positive { background: #e5f7e5; color: #1a7a1a; }
+    .sentiment-neutral { background: #f0f0f0; color: #555; }
+    .sentiment-negative { background: #ffe5e5; color: #b41018; }
+    .sentiment-mixed { background: #fff4e5; color: #b46010; }
+    details.geo-quotes summary { cursor: pointer; font-size: 12px; color: #0066cc; }
+    details.geo-quotes blockquote { margin: 8px 0 0 0; padding-left: 10px; border-left: 2px solid #ddd; color: #555; font-size: 12px; font-style: italic; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <h1>Epico konkurrenttracker</h1>
@@ -60,6 +74,8 @@
         <tr><td>CVR-API</td><td>Aendringer i navn, adresse, ansatte, branche, kreditstatus, konkurs m.m.</td></tr>
         <tr><td>Google News</td><td>Danske nyhedsartikler om konkurrenten.</td></tr>
         <tr><td>Web-snapshot</td><td>Forsiden hash'es og diff'es - aendringer paa minimum 200 tegn registreres.</td></tr>
+        <tr><td>Web-intel</td><td>Tech-stack (ATS, CMS, analytics, marketing-tools) + sitemap-velocity. Detekterer fx skift fra Workday til Greenhouse, eller pludselig vaekst i blog-content.</td></tr>
+        <tr><td>GEO (AI-soegning)</td><td>10 realistiske brugerspoergsmaal stilles til Claude. Vi maaler "share of voice" - hvor ofte hver konkurrent bliver naevnt + sentiment.</td></tr>
       </table>
 
       <h4>Klassificering af jobopslag (Haiku)</h4>
@@ -78,12 +94,13 @@
         <li><strong>Fag-koncentration</strong> &mdash; satser paa nyt domaene (AI, ML, security)</li>
         <li><strong>Korrelation</strong> &mdash; senior-hires + funding-omtale = vaekstfase</li>
       </ul>
-      <p>Hvert signal faar severity (<code>urgent</code> / <code>signal</code> / <code>opportunity</code>) og en ansvarlig (Talent / Sales / Marketing / CEO).</p>
+      <p>Hvert signal faar severity (<code>urgent</code> / <code>signal</code> / <code>opportunity</code>) og en ansvarlig (Talent / Sales / Marketing / CEO). <strong>Urgent</strong>-signaler postes ogsaa direkte til Slack hvis webhook er konfigureret.</p>
     </div>
   </details>
 
   <div style="margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
     <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Koer alle scrapere</button>
+    <button id="btn-geo" style="padding: 8px 14px; background: #6a3fb5; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Maal AI-synlighed (GEO)</button>
     <button id="btn-synthesize" style="padding: 8px 14px; background: #b41018; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer signaler (Sonnet)</button>
     <button id="btn-report" style="padding: 8px 14px; background: #0066cc; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent rapport som PDF</button>
     <span id="action-status" style="font-size: 13px; color: #666; margin-left: 8px;"></span>
@@ -93,6 +110,8 @@
 
   <div class="tabs">
     <button class="tab active" data-tab="signals">Signaler</button>
+    <button class="tab" data-tab="trends">Trends</button>
+    <button class="tab" data-tab="geo">GEO (AI-synlighed)</button>
     <button class="tab" data-tab="jobs">Jobopslag</button>
     <button class="tab" data-tab="events">Firma-events</button>
     <button class="tab" data-tab="reports">Rapporter</button>
@@ -164,6 +183,135 @@
       </tbody></table>`;
     }
 
+    // Chart-instanser holdes i scope saa vi kan destroy() dem ved re-render
+    const charts = {};
+
+    function paletteColor(idx) {
+      const palette = [
+        "#b41018", "#0066cc", "#1a7a1a", "#b46010", "#6a3fb5",
+        "#1a1a1a", "#d8444b", "#3b95ff", "#56a456", "#e5a23a",
+      ];
+      return palette[idx % palette.length];
+    }
+
+    async function renderTrends() {
+      // Container med to charts
+      const html = `
+        <div class="chart-card">
+          <h3>Jobopslag pr. uge - pr. konkurrent</h3>
+          <div class="chart-sub">Sidste 90 dage. Spike pr. konkurrent indikerer hyringspres eller ny initiativ.</div>
+          <div class="chart-wrap"><canvas id="chart-jobs-comp"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Jobopslag pr. uge - pr. fagomraade</h3>
+          <div class="chart-sub">Sidste 90 dage. Viser om markedet flytter sig (fx mod AI/ML eller cloud).</div>
+          <div class="chart-wrap"><canvas id="chart-jobs-cat"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>GEO share-of-voice over tid</h3>
+          <div class="chart-sub">Hvor stor en andel af AI-svar paa rekrutterings/konsulent-spoergsmaal naevner hver konkurrent.</div>
+          <div class="chart-wrap"><canvas id="chart-geo"></canvas></div>
+        </div>
+      `;
+      document.getElementById("content").innerHTML = html;
+
+      const [jobsComp, jobsCat, geo] = await Promise.all([
+        fetchJSON("/api/trends/jobs?days=90").catch(() => ({ weeks: [], series: [] })),
+        fetchJSON("/api/trends/jobs-by-category?days=90").catch(() => ({ weeks: [], series: [] })),
+        fetchJSON("/api/geo/trends?weeks=12").catch(() => ({ weeks: [], series: [] })),
+      ]);
+
+      drawLineChart("chart-jobs-comp", jobsComp);
+      drawLineChart("chart-jobs-cat", jobsCat);
+      drawLineChart("chart-geo", geo, { yMax: 1, percent: true });
+    }
+
+    function drawLineChart(canvasId, payload, options = {}) {
+      const ctx = document.getElementById(canvasId);
+      if (!ctx) return;
+      if (charts[canvasId]) charts[canvasId].destroy();
+      if (!payload.weeks || !payload.weeks.length) {
+        ctx.parentElement.innerHTML = `<div class="empty">Ingen data endnu.</div>`;
+        return;
+      }
+      charts[canvasId] = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: payload.weeks,
+          datasets: payload.series.map((s, i) => ({
+            label: s.name,
+            data: s.data,
+            borderColor: paletteColor(i),
+            backgroundColor: paletteColor(i) + "22",
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 2,
+          })),
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
+            tooltip: {
+              callbacks: options.percent
+                ? { label: c => `${c.dataset.label}: ${(c.parsed.y * 100).toFixed(0)}%` }
+                : {},
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: options.yMax,
+              ticks: options.percent ? { callback: v => `${(v * 100).toFixed(0)}%` } : {},
+            },
+          },
+        },
+      });
+    }
+
+    async function renderGeo() {
+      let data;
+      try {
+        data = await fetchJSON("/api/geo/latest");
+      } catch (err) {
+        document.getElementById("content").innerHTML = `<div class="empty">Fejl: ${err.message}</div>`;
+        return;
+      }
+      if (!data.rows || !data.rows.length) {
+        document.getElementById("content").innerHTML = `<div class="empty">
+          Ingen GEO-maalinger endnu. Klik "Maal AI-synlighed (GEO)" oeverst for at koere foerste pass.
+          (Kraever ANTHROPIC_API_KEY)
+        </div>`;
+        return;
+      }
+      document.getElementById("content").innerHTML = `
+        <div style="margin-bottom: 16px; color: #666; font-size: 13px;">
+          Uge <strong>${data.week}</strong> &middot; ${data.rows[0].total_queries} brugerspoergsmaal stillet til Claude.
+          "Share of voice" = andel af svar hvor konkurrenten naevnes.
+        </div>
+        <table>
+          <thead><tr><th>Konkurrent</th><th>Mentions</th><th>Share of voice</th><th>Sentiment</th><th>Eksempler</th></tr></thead>
+          <tbody>
+            ${data.rows.map(r => `
+              <tr>
+                <td><strong>${r.competitor.name}</strong></td>
+                <td>${r.mentions} / ${r.total_queries}</td>
+                <td>
+                  <div>${(r.share_of_voice * 100).toFixed(0)}%</div>
+                  <div class="geo-bar-wrap"><div class="geo-bar-fill" style="width:${(r.share_of_voice * 100).toFixed(0)}%"></div></div>
+                </td>
+                <td><span class="sentiment sentiment-${r.sentiment}">${r.sentiment}</span></td>
+                <td>${r.sample_quotes && r.sample_quotes.length
+                  ? `<details class="geo-quotes"><summary>${r.sample_quotes.length} uddrag</summary>${r.sample_quotes.map(q => `<blockquote>${q.replace(/</g, "&lt;")}</blockquote>`).join("")}</details>`
+                  : "<span style=\"color:#aaa\">-</span>"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
     function renderReports(rows) {
       const downloadBtn = (week) => `<a href="/admin/report/download?week=${encodeURIComponent(week)}" style="display:inline-block;padding:4px 10px;background:#0066cc;color:white;text-decoration:none;border-radius:3px;font-size:12px;">Download PDF</a>`;
       if (!rows.length) {
@@ -200,10 +348,16 @@
     }
 
     async function refresh() {
+      // Vis/skjul kompetitor-filteret afhaengigt af tab
+      const noFilterTabs = new Set(["reports", "trends", "geo"]);
+      document.querySelector(".filters").style.display = noFilterTabs.has(state.tab) ? "none" : "flex";
+
+      if (state.tab === "trends") return renderTrends();
+      if (state.tab === "geo") return renderGeo();
+
       const params = state.competitor ? `?competitor=${encodeURIComponent(state.competitor)}` : "";
       const path = { signals: "/api/signals", jobs: "/api/jobs", events: "/api/events", reports: "/admin/reports" }[state.tab];
       const renderer = { signals: renderSignals, jobs: renderJobs, events: renderEvents, reports: renderReports }[state.tab];
-      // Reports-tabben filtrerer ikke pr. konkurrent
       const url = state.tab === "reports" ? path : `${path}${params}`;
       try {
         const data = await fetchJSON(url);
@@ -221,6 +375,9 @@
       }
       if (data.signals_added !== undefined) {
         return `${label}: ${data.signals_added} signaler tilfoejet${data.reason ? ` (${data.reason})` : ""}`;
+      }
+      if (data.competitors_tracked !== undefined) {
+        return `${label}: ${data.competitors_tracked} konkurrenter maalt over ${data.runs} prompts (uge ${data.week || "-"})${data.reason ? ` - ${data.reason}` : ""}`;
       }
       if (data.pdf_size_kb !== undefined) {
         const mailInfo = data.mail.skipped ? `(mail skipped: ${data.mail.reason})` : `(mail sendt til ${data.mail.sent})`;
@@ -266,6 +423,7 @@
         competitors.forEach(c => sel.innerHTML += `<option value="${c.slug}">${c.name}</option>`);
         sel.addEventListener("change", e => { state.competitor = e.target.value; refresh(); });
         document.getElementById("btn-scrape").addEventListener("click", () => triggerAction("Scrape", "/admin/scrape/all"));
+        document.getElementById("btn-geo").addEventListener("click", () => triggerAction("GEO-pass", "/admin/analyze/geo"));
         document.getElementById("btn-synthesize").addEventListener("click", () => triggerAction("Syntese", "/admin/analyze/synthesize"));
         document.getElementById("btn-report").addEventListener("click", () => {
           const status = document.getElementById("action-status");
