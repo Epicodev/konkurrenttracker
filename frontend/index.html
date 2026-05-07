@@ -28,11 +28,59 @@
     .empty { text-align: center; color: #888; padding: 40px; font-style: italic; }
     a { color: #b41018; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    details.info { background: #fafafa; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; }
+    details.info > summary { cursor: pointer; font-weight: 600; color: #1a1a1a; list-style: none; display: flex; align-items: center; gap: 6px; }
+    details.info > summary::-webkit-details-marker { display: none; }
+    details.info > summary::before { content: "\25B8"; color: #b41018; font-size: 11px; transition: transform 0.15s; }
+    details.info[open] > summary::before { transform: rotate(90deg); }
+    details.info .info-body { margin-top: 12px; color: #333; line-height: 1.55; }
+    details.info h4 { margin: 14px 0 6px; font-size: 13px; color: #b41018; text-transform: uppercase; letter-spacing: 0.4px; }
+    details.info h4:first-child { margin-top: 0; }
+    details.info ul { margin: 4px 0; padding-left: 20px; }
+    details.info li { margin-bottom: 4px; }
+    details.info code { background: #fff; border: 1px solid #e5e5e5; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+    details.info table.info-table { font-size: 12px; margin-top: 6px; }
+    details.info table.info-table td { padding: 4px 10px 4px 0; border: 0; vertical-align: top; }
+    details.info table.info-table td:first-child { font-weight: 600; white-space: nowrap; color: #b41018; }
   </style>
 </head>
 <body>
   <h1>Epico konkurrenttracker</h1>
   <p class="subtitle">Live overblik over signaler, jobopslag og firma-events fra de aktive konkurrenter.</p>
+
+  <details class="info">
+    <summary>Hvad kigger systemet efter?</summary>
+    <div class="info-body">
+      <p>Hver konkurrent overvaages via 5 gratis datakilder. Raa data klassificeres af Claude Haiku, og en gang om ugen finder Claude Sonnet de 4-6 vigtigste signaler.</p>
+
+      <h4>Datakilder</h4>
+      <table class="info-table">
+        <tr><td>Jobindex RSS</td><td>Nye jobopslag pr. konkurrent (firmanavn skal forekomme i titel/beskrivelse).</td></tr>
+        <tr><td>Karriere-sider</td><td>Konkurrentens egen jobside parses for nye opslag (CSS-selectors pr. konkurrent).</td></tr>
+        <tr><td>CVR-API</td><td>Aendringer i navn, adresse, ansatte, branche, kreditstatus, konkurs m.m.</td></tr>
+        <tr><td>Google News</td><td>Danske nyhedsartikler om konkurrenten.</td></tr>
+        <tr><td>Web-snapshot</td><td>Forsiden hash'es og diff'es - aendringer paa minimum 200 tegn registreres.</td></tr>
+      </table>
+
+      <h4>Klassificering af jobopslag (Haiku)</h4>
+      <ul>
+        <li><strong>Fagomraade:</strong> Backend, Frontend, Data Science, Cloud/DevOps, Salg, HR, Projektledelse, Konsulent, Marketing, Oekonomi, Andet</li>
+        <li><strong>Seniority:</strong> junior / mid / senior</li>
+        <li><strong>Freelance:</strong> ja/nej</li>
+      </ul>
+
+      <h4>Ugentlige signaler (Sonnet)</h4>
+      <p>Sonnet leder eksplicit efter:</p>
+      <ul>
+        <li><strong>Volumen-spike</strong> &mdash; konkurrent har 3x saa mange roller af en type som normalt</li>
+        <li><strong>Niveau-skift</strong> &mdash; junior- til senior-roller (opskalering)</li>
+        <li><strong>Geografisk skift</strong> &mdash; aabner i nyt omraade</li>
+        <li><strong>Fag-koncentration</strong> &mdash; satser paa nyt domaene (AI, ML, security)</li>
+        <li><strong>Korrelation</strong> &mdash; senior-hires + funding-omtale = vaekstfase</li>
+      </ul>
+      <p>Hvert signal faar severity (<code>urgent</code> / <code>signal</code> / <code>opportunity</code>) og en ansvarlig (Talent / Sales / Marketing / CEO).</p>
+    </div>
+  </details>
 
   <div style="margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
     <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Koer alle scrapere</button>
