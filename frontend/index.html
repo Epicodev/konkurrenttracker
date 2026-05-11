@@ -134,7 +134,8 @@
   </details>
 
   <div style="margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-    <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Kør alle scrapere</button>
+    <button id="btn-refresh-all" style="padding: 8px 16px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer;">⟳ Opdater alt</button>
+    <button id="btn-scrape" style="padding: 8px 14px; background: #555; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Kun konkurrent-scrapere</button>
     <button id="btn-finance" style="padding: 8px 14px; background: #1a7a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent regnskaber</button>
     <button id="btn-market" style="padding: 8px 14px; background: #d97a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Scan IT-markedet</button>
     <button id="btn-geo" style="padding: 8px 14px; background: #6a3fb5; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Mål AI-synlighed (GEO)</button>
@@ -813,7 +814,7 @@
         const sel = document.getElementById("competitor-filter");
         competitors.forEach(c => sel.innerHTML += `<option value="${c.slug}">${c.name}</option>`);
         sel.addEventListener("change", e => { state.competitor = e.target.value; refresh(); });
-        document.getElementById("btn-scrape").addEventListener("click", () => triggerAction("Scrape", "/admin/scrape/all"));
+        document.getElementById("btn-scrape").addEventListener("click", () => triggerAction("Konkurrent-scrape", "/admin/scrape/all"));
         document.getElementById("btn-finance").addEventListener("click", () => triggerAction("Regnskaber", "/admin/scrape/finance"));
         document.getElementById("btn-market").addEventListener("click", async () => {
           // Scan markedet + klassificer i én knap (kører sekventielt)
@@ -821,6 +822,49 @@
           await triggerAction("Klassificer marked (Haiku)", "/admin/analyze/market_classify");
         });
         document.getElementById("btn-geo").addEventListener("click", () => triggerAction("GEO-pass", "/admin/analyze/geo"));
+
+        // "Opdater alt"-knap: orkestrerer hele pipelinen med statusopdateringer.
+        // Sekventielle trin: scrapere -> klassificering -> Sonnet-analyser.
+        // GEO er uafhængig og kører parallelt med syntese.
+        document.getElementById("btn-refresh-all").addEventListener("click", async () => {
+          const btn = document.getElementById("btn-refresh-all");
+          const status = document.getElementById("action-status");
+          btn.disabled = true;
+          btn.style.opacity = "0.6";
+          const startTime = Date.now();
+          const steps = [
+            {label: "1/5 Konkurrent-scrapere", urls: ["/admin/scrape/all"]},
+            {label: "2/5 Scan IT-markedet", urls: ["/admin/scrape/market_jobs"]},
+            {label: "3/5 Haiku-klassificering", urls: ["/admin/analyze/market_classify"]},
+            {label: "4/5 Sonnet-syntese + markedstrends", urls: ["/admin/analyze/synthesize", "/admin/analyze/market_trends"]},
+            {label: "5/5 GEO-pass (AI-synlighed)", urls: ["/admin/analyze/geo"]},
+          ];
+          const errors = [];
+          try {
+            for (const step of steps) {
+              status.textContent = `${step.label} kører...`;
+              // Hvis flere URLs i samme trin: kør parallelt
+              const results = await Promise.allSettled(step.urls.map(u => fetch(u, {method: "POST"})));
+              results.forEach((r, i) => {
+                if (r.status === "rejected" || (r.value && !r.value.ok)) {
+                  errors.push(`${step.label}: ${step.urls[i]}`);
+                }
+              });
+            }
+            const elapsed = Math.round((Date.now() - startTime) / 1000);
+            if (errors.length === 0) {
+              status.textContent = `✓ Alt opdateret (${elapsed} sek)`;
+            } else {
+              status.textContent = `Færdig med ${errors.length} fejl: ${errors.join(", ")} (${elapsed} sek)`;
+            }
+            await Promise.all([refreshStats(), refresh()]);
+          } catch (err) {
+            status.textContent = "Opdatering fejlede: " + err.message;
+          } finally {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+          }
+        });
         document.getElementById("btn-synthesize").addEventListener("click", () => triggerAction("Syntese", "/admin/analyze/synthesize"));
         document.getElementById("btn-report").addEventListener("click", () => {
           const status = document.getElementById("action-status");
