@@ -346,10 +346,13 @@
         return;
       }
       const html = `
-        <div style="margin-bottom:12px;color:#666;font-size:13px;">
-          Rediger CVR, domæne, karriere-URL og scraper-konfiguration pr. konkurrent.
-          CVR er nødvendigt for at hente regnskaber. Domæne er nødvendigt for web-intel og web-snapshot.
-          Klik "Gem" på en række for at gemme ændringer.
+        <div style="margin-bottom:12px;color:#666;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div>
+            Rediger CVR, domæne, karriere-URL og scraper-konfiguration pr. konkurrent.
+            CVR er nødvendigt for at hente regnskaber. Domæne er nødvendigt for web-intel og web-snapshot.
+            Klik "Gem" på en række for at gemme ændringer.
+          </div>
+          <button id="btn-fill-defaults" style="padding:6px 12px;background:#0066cc;color:white;border:0;border-radius:4px;font-size:12px;cursor:pointer;white-space:nowrap;">Fyld defaults ind</button>
         </div>
         <table class="admin-table">
           <thead><tr>
@@ -372,7 +375,7 @@
                 <td><input data-field="career_url" value="${escapeHtml(c.career_url || "")}" placeholder="https://..."></td>
                 <td><input data-field="jobindex_query" value="${escapeHtml(c.jobindex_query || "")}"></td>
                 <td><input data-field="google_news_query" value="${escapeHtml(c.google_news_query || "")}"></td>
-                <td><input data-field="geo_aliases" value="${escapeHtml(c.geo_aliases || "")}" placeholder="ProData, emagine"></td>
+                <td><input data-field="geo_aliases" value="${escapeHtml(c.geo_aliases || "")}" placeholder="alt. navne, komma-sep."></td>
                 <td class="admin-active"><input type="checkbox" data-field="active" ${c.active ? "checked" : ""}></td>
                 <td>
                   <button class="btn-save" data-slug="${c.slug}">Gem</button>
@@ -384,6 +387,25 @@
         </table>
       `;
       document.getElementById("content").innerHTML = html;
+
+      // "Fyld defaults ind" - populerer anbefalede vaerdier i TOMME felter
+      const fillBtn = document.getElementById("btn-fill-defaults");
+      if (fillBtn) {
+        fillBtn.addEventListener("click", async () => {
+          fillBtn.disabled = true;
+          fillBtn.textContent = "Udfylder...";
+          try {
+            const res = await fetch("/admin/competitors/fill-defaults", {method: "POST"});
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            fillBtn.textContent = `✓ ${data.count} konkurrenter opdateret`;
+            setTimeout(() => renderCompetitors(), 1200);
+          } catch (err) {
+            fillBtn.textContent = "✗ " + err.message;
+            fillBtn.disabled = false;
+          }
+        });
+      }
 
       // Tilknyt save-handlers
       document.querySelectorAll(".btn-save").forEach(btn => {

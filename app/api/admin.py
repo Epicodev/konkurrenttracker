@@ -67,6 +67,90 @@ def admin_list_competitors(session: Session = Depends(get_session)) -> list[dict
     return [_competitor_to_dict(c) for c in rows]
 
 
+# Anbefalede defaults pr. slug. Bruges af /admin/competitors/fill-defaults til at
+# populere tomme felter uden at overskrive brugerændringer.
+COMPETITOR_DEFAULTS: dict[str, dict[str, Any]] = {
+    "prodata": {
+        "name": "ProData Consult A/S (nu emagine Consulting A/S)",
+        "cvr": "26249627",
+        "domain": "emagine.org",
+        "jobindex_query": "ProData",
+        "google_news_query": "ProData OR emagine Consulting",
+        "geo_aliases": ["ProData", "emagine", "ProData Consult"],
+    },
+    "right-people": {
+        "name": "Right People Group ApS",
+        "cvr": "30590627",
+        "domain": "rightpeoplegroup.com",
+        "jobindex_query": "Right People",
+        "google_news_query": "Right People Group",
+        "geo_aliases": ["Right People", "Right People Group", "RPG"],
+    },
+    "hays": {
+        "name": "Hays Specialist Recruitment Denmark A/S",
+        "cvr": "30908848",
+        "domain": "hays.dk",
+        "jobindex_query": "Hays",
+        "google_news_query": "Hays Denmark",
+        "geo_aliases": ["Hays", "Hays Denmark", "Hays Specialist Recruitment"],
+    },
+    "zen": {
+        "name": "Zen Consulting",
+        "jobindex_query": "Zen Consulting",
+        "google_news_query": "Zen Consulting",
+        "geo_aliases": ["Zen Consulting", "Zen"],
+    },
+    "brainville": {
+        "name": "Brainville",
+        "jobindex_query": "Brainville",
+        "google_news_query": "Brainville OR Ework Group",
+        "geo_aliases": ["Brainville", "Ework", "Ework Group"],
+    },
+}
+
+
+@router.post("/competitors/fill-defaults")
+def admin_fill_defaults(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Fyld TOMME felter med anbefalede defaults. Overskriver IKKE eksisterende værdier."""
+    updated_slugs: list[str] = []
+    for slug, defaults in COMPETITOR_DEFAULTS.items():
+        competitor = session.exec(select(Competitor).where(Competitor.slug == slug)).first()
+        if competitor is None:
+            continue
+        changed = False
+        # Top-level felter
+        for field in ("name", "cvr", "domain", "career_url"):
+            if field in defaults and not getattr(competitor, field):
+                setattr(competitor, field, defaults[field])
+                changed = True
+        # scraper_config-felter (merge ind uden at slette andre keys)
+        config = dict(competitor.scraper_config or {})
+        if "jobindex_query" in defaults:
+            jx = dict(config.get("jobindex") or {})
+            if not jx.get("query"):
+                jx["query"] = defaults["jobindex_query"]
+                config["jobindex"] = jx
+                changed = True
+        if "google_news_query" in defaults:
+            gn = dict(config.get("google_news") or {})
+            if not gn.get("query"):
+                gn["query"] = defaults["google_news_query"]
+                config["google_news"] = gn
+                changed = True
+        if "geo_aliases" in defaults:
+            geo = dict(config.get("geo") or {})
+            if not geo.get("aliases"):
+                geo["aliases"] = defaults["geo_aliases"]
+                config["geo"] = geo
+                changed = True
+        if changed:
+            competitor.scraper_config = config
+            session.add(competitor)
+            updated_slugs.append(slug)
+    session.commit()
+    return {"updated": updated_slugs, "count": len(updated_slugs)}
+
+
 @router.patch("/competitors/{slug}")
 def admin_update_competitor(
     slug: str,
