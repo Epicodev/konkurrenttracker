@@ -1,4 +1,4 @@
-"""Cron-entrypoint: koer CVR-scraperen for alle aktive konkurrenter med CVR-nummer.
+"""Cron-entrypoint: kør CVR-scraperen for alle aktive konkurrenter med CVR-nummer.
 
 Koeres som: python -m app.jobs.scrape_cvr
 """

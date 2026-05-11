@@ -1,8 +1,8 @@
 """In-process cron-scheduler.
 
-APScheduler koerer paa FastAPI-processen og afvikler de 5 scrapere efter samme
+APScheduler kører på FastAPI-processen og afvikler de 5 scrapere efter samme
 tidsplan som udviklingsplanen specificerer. Misfire grace time tillader at jobs
-afvikles efter container-restart hvis de er taet paa missing.
+afvikles efter container-restart hvis de er tæt på missing.
 """
 
 from __future__ import annotations
@@ -59,8 +59,8 @@ def _wrap(scraper: Scraper) -> callable:  # type: ignore[type-arg]
                 + "\n".join(failures[:5])
             )
         elif added == 0 and scraper.source in ("jobindex", "career_page"):
-            # 0 nye er mistaenkeligt for de "skroebelige" scrapere
-            slack_alert(f"ℹ️ Scraper *{scraper.source}* fandt 0 nye opslag i denne koersel.")
+            # 0 nye er mistænkeligt for de "skrøbelige" scrapere
+            slack_alert(f"ℹ️ Scraper *{scraper.source}* fandt 0 nye opslag i denne kørsel.")
 
     job.__name__ = f"cron_{scraper.source}"
     return job
@@ -80,7 +80,7 @@ def _classify_job() -> None:
 def _synthesize_job() -> None:
     logger.info("cron.synthesize.start")
     with Session(engine) as session:
-        # Klassificer foerst, saa Sonnet faar bedst muligt input
+        # Klassificer først, så Sonnet får bedst muligt input
         classify_pending(session)
         result = synthesize_week(session)
         # Find urgent-signaler i denne uge og post pr. signal til Slack
@@ -114,7 +114,7 @@ def _geo_job() -> None:
         result = run_geo_pass(session)
     logger.info("cron.geo.done", **result)
     if result.get("competitors_tracked", 0) == 0:
-        slack_alert(f"⚠️ GEO-pass tilfoejede 0 maalinger. Reason: {result.get('reason', 'ukendt')}")
+        slack_alert(f"⚠️ GEO-pass tilføjede 0 målinger. Reason: {result.get('reason', 'ukendt')}")
 
 
 def _deliver_job() -> None:
@@ -127,7 +127,7 @@ def _deliver_job() -> None:
 
 # Single source of truth for alle scheduler-jobs jf. udviklingsplan sektion 06.
 # (id, name, callable_factory, trigger). callable_factory tager ingen args og returnerer
-# det callable scheduler skal koere - vi bruger lambda saa scrapere kan instantieres lazy.
+# det callable scheduler skal køre - vi bruger lambda så scrapere kan instantieres lazy.
 JOB_CONFIGS: list[tuple[str, str, callable, CronTrigger]] = [  # type: ignore[type-arg]
     ("scrape_jobindex", "Scrape Jobindex", lambda: _wrap(JobindexScraper()), CronTrigger(hour=2, minute=0)),
     ("scrape_career_page", "Scrape karriere-sider", lambda: _wrap(CareerSiteScraper()), CronTrigger(hour=2, minute=30)),

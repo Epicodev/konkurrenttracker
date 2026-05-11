@@ -51,7 +51,7 @@ def send_weekly_report(
 
     subject = subject or f"Epico konkurrent-rapport · uge {week}"
     body_html = body_html or (
-        f"<p>Den ugentlige rapport for uge <strong>{week}</strong> er vedhaeftet.</p>"
+        f"<p>Den ugentlige rapport for uge <strong>{week}</strong> er vedhæftet.</p>"
         f"<p>Tjek dashboardet for filtrering og dybere udforskning.</p>"
     )
     pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")

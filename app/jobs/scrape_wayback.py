@@ -1,4 +1,4 @@
-"""Cron-entrypoint: koer wayback (web-snapshot) scraperen for alle aktive konkurrenter.
+"""Cron-entrypoint: kør wayback (web-snapshot) scraperen for alle aktive konkurrenter.
 
 Koeres som: python -m app.jobs.scrape_wayback
 """

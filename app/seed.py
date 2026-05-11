@@ -2,7 +2,7 @@
 
 Koeres som: python -m app.seed
 
-Genkoersel: opdaterer name, active og scraper_config paa eksisterende slugs.
+Genkørsel: opdaterer name, active og scraper_config på eksisterende slugs.
 """
 
 from typing import Any
@@ -49,8 +49,8 @@ COMPETITORS: list[dict[str, Any]] = [
         "active": True,
         "scraper_config": {"jobindex": {"query": "Brainville"}},
     },
-    # Placeholder-konkurrenter: aktive (taeller med i /healthz) men uden scraper-config,
-    # saa scraperen springer dem over indtil rigtige firma-data laegges ind.
+    # Placeholder-konkurrenter: aktive (tæller med i /healthz) men uden scraper-config,
+    # så scraperen springer dem over indtil rigtige firma-data lægges ind.
     {"slug": "competitor-06", "name": "Konkurrent 06 (placeholder)", "active": True, "scraper_config": {}},
     {"slug": "competitor-07", "name": "Konkurrent 07 (placeholder)", "active": True, "scraper_config": {}},
     {"slug": "competitor-08", "name": "Konkurrent 08 (placeholder)", "active": True, "scraper_config": {}},
@@ -80,7 +80,7 @@ def seed() -> None:
                     updated += 1
         session.commit()
         total = len(session.exec(select(Competitor)).all())
-        print(f"Seed faerdig: {added} ny(e), {updated} opdateret, {total} i alt.")
+        print(f"Seed færdig: {added} ny(e), {updated} opdateret, {total} i alt.")
 
 
 if __name__ == "__main__":

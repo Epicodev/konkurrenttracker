@@ -1,16 +1,16 @@
 """GEO (Generative Engine Optimization) tracker.
 
-Maaler "share of voice" - hvor ofte hver konkurrent bliver naevnt af en AI
-naar man stiller realistiske brugersporgsmal om rekruttering / IT-konsulent /
+Måler "share of voice" - hvor ofte hver konkurrent bliver nævnt af en AI
+når man stiller realistiske brugerspørgsmål om rekruttering / IT-konsulent /
 bemanding i Danmark.
 
 Pipeline pr. uge:
 1. Stil N standardprompts mod Claude (kunne udvides til OpenAI/Perplexity).
-2. Tael for hver konkurrent hvor mange svar deres navn (eller alias) optraeder i.
-3. Lad Claude vurdere overordnet sentiment for hvert firma paa tvaers af svarene.
+2. Tæl for hver konkurrent hvor mange svar deres navn (eller alias) optræder i.
+3. Lad Claude vurdere overordnet sentiment for hvert firma på tværs af svarene.
 4. Gem GeoMention-row pr. (week, competitor, ai_engine).
 
-Hvis ANTHROPIC_API_KEY ikke er sat: skip aabent.
+Hvis ANTHROPIC_API_KEY ikke er sat: skip åbent.
 """
 
 from __future__ import annotations
@@ -33,34 +33,34 @@ logger = structlog.get_logger(__name__)
 CLAUDE_MODEL = "claude-sonnet-4-6"
 SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "geo_queries.md").read_text(encoding="utf-8")
 
-# Realistiske brugersporgsmal for Epicos marked. Sigter efter situationer hvor
+# Realistiske brugerspørgsmål for Epicos marked. Sigter efter situationer hvor
 # Epico OG konkurrenter er relevante svar. Hold den tight - flere prompts =
-# flere API-kald, men ogsaa stoerre stikprove.
+# flere API-kald, men også større stikprove.
 DEFAULT_PROMPTS: list[str] = [
     "Hvilke konsulenthuse i Danmark er bedst til at finde SAP-konsulenter?",
-    "Hvem er de stoerste IT-bemandingsbureauer i Koebenhavn?",
+    "Hvem er de største IT-bemandingsbureauer i København?",
     "Hvilket rekrutteringsbureau bruger jeg hvis jeg skal hyre en senior backend-udvikler i Aarhus?",
     "Hvilke danske firmaer er specialiseret i freelance IT-konsulenter?",
     "Hvem er de bedste headhuntere til tech-roller i Danmark?",
-    "Anbefal et konsulenthus til at hjaelpe med digital transformation i Danmark.",
-    "Hvilke firmaer udlejer software-udviklere paa kontrakt i Danmark?",
+    "Anbefal et konsulenthus til at hjælpe med digital transformation i Danmark.",
+    "Hvilke firmaer udlejer software-udviklere på kontrakt i Danmark?",
     "Hvem skal jeg kontakte for at finde en interim CTO i Danmark?",
     "Hvilke rekrutteringsfirmaer er specialiseret i data scientists og ML-engineers i Danmark?",
-    "Hvis jeg skal opskalere et tech-team hurtigt i Koebenhavn, hvilke bureauer kan hjaelpe?",
+    "Hvis jeg skal opskalere et tech-team hurtigt i København, hvilke bureauer kan hjælpe?",
 ]
 
-SENTIMENT_PROMPT = """Du er en upartisk analytiker. Nedenfor er N AI-svar paa
-forskellige brugerspoergsmaal hvor firmaet "{name}" blev naevnt.
+SENTIMENT_PROMPT = """Du er en upartisk analytiker. Nedenfor er N AI-svar på
+forskellige brugerspørgsmål hvor firmaet "{name}" blev nævnt.
 
 For hvert svar - hvordan beskrives firmaet? Klassificer den samlede sentiment
-paa tvaers af alle svarene som EET af:
+på tværs af alle svarene som EET af:
 
-- positive: tydelig positiv anbefaling, fremhaeves som ledende eller bedst
-- neutral: naevnes som mulighed blandt andre, ingen klar holdning
+- positive: tydelig positiv anbefaling, fremhæves som ledende eller bedst
+- neutral: nævnes som mulighed blandt andre, ingen klar holdning
 - negative: kritik eller advarsel
 - mixed: tydelig blanding af positive og negative omtaler
 
-Svar udelukkende med een af de fire vaerdier - intet andet.
+Svar udelukkende med een af de fire værdier - intet andet.
 
 AI-SVARENE:
 {quotes}
@@ -79,7 +79,7 @@ def _iso_week(dt: datetime) -> str:
 
 
 def _aliases(competitor: Competitor) -> list[str]:
-    """Returner liste af navne/aliasses vi vil match paa i AI-svar."""
+    """Returner liste af navne/aliasses vi vil match på i AI-svar."""
     config: dict[str, Any] = competitor.scraper_config or {}
     aliases: list[str] = []
     name = (competitor.name or "").strip()
@@ -92,7 +92,7 @@ def _aliases(competitor: Competitor) -> list[str]:
     # Eksplicitte aliasses fra config
     extra = config.get("geo", {}).get("aliases") or []
     aliases.extend(str(a) for a in extra)
-    # Domaen-baseret alias (ex: "epico.dk" -> "epico")
+    # Domæn-baseret alias (ex: "epico.dk" -> "epico")
     if competitor.domain:
         host = competitor.domain.replace("https://", "").replace("http://", "").split("/")[0]
         token = host.split(".")[0]
@@ -110,10 +110,10 @@ def _aliases(competitor: Competitor) -> list[str]:
 
 
 def _mentions_in(text: str, aliases: list[str]) -> bool:
-    """True hvis et af aliasses optraeder som ord i teksten (case-insensitive)."""
+    """True hvis et af aliasses optræder som ord i teksten (case-insensitive)."""
     lowered = text.lower()
     for alias in aliases:
-        # Word-boundary match - undgaa fx "Hays" matcher "haystack"
+        # Word-boundary match - undgå fx "Hays" matcher "haystack"
         if re.search(r"\b" + re.escape(alias.lower()) + r"\b", lowered):
             return True
     return False
@@ -122,7 +122,7 @@ def _mentions_in(text: str, aliases: list[str]) -> bool:
 def _classify_sentiment(client: Anthropic, name: str, quotes: list[str]) -> str:
     if not quotes:
         return "neutral"
-    joined = "\n\n---\n\n".join(quotes[:5])  # max 5 svar for at holde prompt-stoerrelse nede
+    joined = "\n\n---\n\n".join(quotes[:5])  # max 5 svar for at holde prompt-størrelse nede
     response = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=20,
@@ -141,7 +141,7 @@ def _classify_sentiment(client: Anthropic, name: str, quotes: list[str]) -> str:
 
 
 def run_geo_pass(session: Session, prompts: list[str] | None = None) -> dict[str, Any]:
-    """Koer alle prompts mod Claude, tael mentions pr. konkurrent, gem GeoMention-rows."""
+    """Kør alle prompts mod Claude, tæl mentions pr. konkurrent, gem GeoMention-rows."""
     client = _client()
     if client is None:
         logger.warning("geo.skipped", reason="no_api_key")
@@ -175,7 +175,7 @@ def run_geo_pass(session: Session, prompts: list[str] | None = None) -> dict[str
     week = _iso_week(datetime.utcnow())
     ai_engine = "claude"
 
-    # Slet eksisterende rows for samme (week, ai_engine) saa re-koersel ikke duplikerer
+    # Slet eksisterende rows for samme (week, ai_engine) så re-kørsel ikke duplikerer
     existing = session.exec(
         select(GeoMention).where(GeoMention.week == week, GeoMention.ai_engine == ai_engine)
     ).all()

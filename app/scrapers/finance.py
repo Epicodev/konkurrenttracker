@@ -2,14 +2,14 @@
 
 Henter regnskaber fra Erhvervsstyrelsens distribution-API (offentlig, no-auth):
 - POST distribution.virk.dk/offentliggoerelser/_search med CVR
-- For hver hit: find XBRL-dokument, parse de 7 noegletal
+- For hver hit: find XBRL-dokument, parse de 7 nøgletal
 - Gem som FinancialReport-row + udsend CompanyEvent (event_type='annual_report')
 
 XBRL-parsing: dansk regnskabstaksonomi bruger fsa:/gsd:-namespaces (Financial
-Statements Authority). Vi matcher elementer paa lokalnavn for at vaere robust
-overfor taxonomy-versioner. Hver vaerdi har en contextRef der peger paa et
-xbrli:context med en regnskabsperiode - vi matcher paa endDate == regnskabets
-slutdato for at tage "naestesening" og ikke et sammenligningstal.
+Statements Authority). Vi matcher elementer på lokalnavn for at være robust
+overfor taxonomy-versioner. Hver værdi har en contextRef der peger på et
+xbrli:context med en regnskabsperiode - vi matcher på endDate == regnskabets
+slutdato for at tage "næst-seneste" og ikke et sammenligningstal.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ KPI_ELEMENTS: dict[str, list[str]] = {
 
 
 def _search_publications(cvr: str, limit: int = 5) -> list[dict[str, Any]]:
-    """Returner liste af regnskabs-offentliggoerelser for et CVR, nyeste foerst."""
+    """Returner liste af regnskabs-offentliggoerelser for et CVR, nyeste først."""
     query = {
         "query": {"term": {"cvrNummer": cvr}},
         "sort": [{"offentliggoerelsesTidspunkt": "desc"}],
@@ -146,7 +146,7 @@ def _extract_value(
     local_names: list[str],
     matching_contexts: set[str],
 ) -> float | None:
-    """Find foerste vaerdi for nogen af local_names i en matchende context."""
+    """Find første værdi for nogen af local_names i en matchende context."""
     for elem in root.iter():
         if _local(elem.tag) not in local_names:
             continue
@@ -173,7 +173,7 @@ def _parse_xbrl(xbrl_bytes: bytes, fiscal_start: date | None, fiscal_end: date |
     contexts = _parse_contexts(root)
     matching = _match_context(contexts, fiscal_start, fiscal_end)
     if not matching:
-        # Fallback: hvis ingen match, brug alle "duration"-contexts (sjaeldent)
+        # Fallback: hvis ingen match, brug alle "duration"-contexts (sjældent)
         logger.info("finance.no_matching_context", fiscal_end=str(fiscal_end))
         return {key: None for key in KPI_ELEMENTS}
 
@@ -272,7 +272,7 @@ class FinanceScraper(Scraper):
 
             summary = (
                 f"Regnskab {fiscal_end.year} ({fiscal_end.isoformat()}). "
-                f"Omsaetning: {_fmt_dkk(kpis.get('revenue'))}, "
+                f"Omsætning: {_fmt_dkk(kpis.get('revenue'))}, "
                 f"resultat: {_fmt_dkk(kpis.get('profit_loss'))}, "
                 f"egenkapital: {_fmt_dkk(kpis.get('equity'))}, "
                 f"ansatte: {avg_emp_int if avg_emp_int else '?'}."

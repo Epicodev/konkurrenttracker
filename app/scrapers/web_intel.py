@@ -1,17 +1,17 @@
 """Web-intel scraper.
 
-To signaler i en scraper, kort fordi de begge stammer fra konkurrentens domaen:
+To signaler i en scraper, kort fordi de begge stammer fra konkurrentens domæn:
 
 1. **Tech stack** - hvilke teknologier bruger de? (CMS, ATS, analytics, marketing,
    chat-tooling, payment). Detekteres via response-headers, meta-tags, script-URLs,
-   inline patterns. Foerste koersel = baseline, efterfoelgende = change-event hvis
-   sajttet er aendret.
+   inline patterns. Første kørsel = baseline, efterfølgende = change-event hvis
+   sajttet er ændret.
 
 2. **Sitemap velocity** - antal URLs i /sitemap.xml. Spike i nye URLs = SEO/content-
-   offensiv. Faldende = sitemap-rensning (sjaeldent men interessant).
+   offensiv. Faldende = sitemap-rensning (sjældent men interessant).
 
-Begge gemmes som CompanyEvent (source='web_intel') saa de viser sig i events-fanen
-og indgaar i Sonnet-syntesen.
+Begge gemmes som CompanyEvent (source='web_intel') så de viser sig i events-fanen
+og indgår i Sonnet-syntesen.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ logger = structlog.get_logger(__name__)
 HTTP_TIMEOUT = 25.0
 USER_AGENT = "Mozilla/5.0 (compatible; konkurrenttracker/1.0; +https://epico.dk)"
 
-# Mapping fra signal -> tech-label. Hver signal er enten en regex paa response-text,
+# Mapping fra signal -> tech-label. Hver signal er enten en regex på response-text,
 # en header-key, eller en host-substring i en script-src.
 TECH_PATTERNS: dict[str, dict[str, list[str]]] = {
     "ats": {
@@ -125,7 +125,7 @@ def _detect_tech(html: str, headers: dict[str, str]) -> dict[str, list[str]]:
 
 
 def _diff_tech(before: dict[str, list[str]], after: dict[str, list[str]]) -> dict[str, dict[str, list[str]]]:
-    """Find aendringer mellem to tech-snapshots."""
+    """Find ændringer mellem to tech-snapshots."""
     changes: dict[str, dict[str, list[str]]] = {}
     categories = set(before) | set(after)
     for category in categories:
@@ -139,7 +139,7 @@ def _diff_tech(before: dict[str, list[str]], after: dict[str, list[str]]) -> dic
 
 
 def _fetch_sitemap_url_count(base_url: str) -> int | None:
-    """Tael antal URLs i /sitemap.xml. Returner None hvis ingen sitemap findes."""
+    """Tæl antal URLs i /sitemap.xml. Returner None hvis ingen sitemap findes."""
     candidates = ["/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml"]
     for path in candidates:
         try:
@@ -157,7 +157,7 @@ def _fetch_sitemap_url_count(base_url: str) -> int | None:
             root = ET.fromstring(response.text)
         except ET.ParseError:
             continue
-        # Tael loc'er - virker for baade <urlset> og <sitemapindex>
+        # Tæl loc'er - virker for både <urlset> og <sitemapindex>
         ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
         urls = root.findall(f".//{ns}loc") or root.findall(".//loc")
         count = len(urls)
@@ -191,7 +191,7 @@ class WebIntelScraper(Scraper):
         result.items_seen = 1
         html = response.text
         headers = {k.lower(): v for k, v in response.headers.items()}
-        # Inkluder script src'er saa eksterne tags ogsaa fanges
+        # Inkluder script src'er så eksterne tags også fanges
         soup = BeautifulSoup(html, "lxml")
         script_srcs = " ".join(s.get("src", "") for s in soup.find_all("script") if s.get("src"))
         link_hrefs = " ".join(l.get("href", "") for l in soup.find_all("link") if l.get("href"))
@@ -245,7 +245,7 @@ class WebIntelScraper(Scraper):
                         competitor_id=competitor.id,  # type: ignore[arg-type]
                         event_type="tech_change",
                         source=self.source,
-                        title=f"Tech-aendring: {url}",
+                        title=f"Tech-ændring: {url}",
                         description=" | ".join(summary_parts)[:1000],
                         url=url,
                         raw_data={"tech": tech, "changes": changes, "previous": previous_tech},
@@ -285,18 +285,18 @@ class WebIntelScraper(Scraper):
                 if isinstance(previous_count, int) and previous_count > 0:
                     delta = sitemap_count - previous_count
                     pct = abs(delta) / previous_count
-                    # Trigger event hvis aendring >= 5% OG mindst 5 URLs forskel
+                    # Trigger event hvis ændring >= 5% OG mindst 5 URLs forskel
                     if pct >= 0.05 and abs(delta) >= 5:
-                        direction = "tilfoejet" if delta > 0 else "fjernet"
+                        direction = "tilføjet" if delta > 0 else "fjernet"
                         session.add(
                             CompanyEvent(
                                 competitor_id=competitor.id,  # type: ignore[arg-type]
                                 event_type="sitemap_velocity",
                                 source=self.source,
-                                title=f"Sitemap-aendring: {url}",
+                                title=f"Sitemap-ændring: {url}",
                                 description=(
                                     f"{abs(delta)} URLs {direction} ({previous_count} -> {sitemap_count}, "
-                                    f"{pct:.0%}). Indikator paa content-velocity."
+                                    f"{pct:.0%}). Indikator på content-velocity."
                                 ),
                                 url=url,
                                 raw_data={

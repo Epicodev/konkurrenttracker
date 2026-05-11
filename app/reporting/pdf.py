@@ -1,7 +1,7 @@
 """WeasyPrint-wrapper. HTML in, PDF ud.
 
-Importeres lazily fordi WeasyPrint kraever cairo/pango via Nix/apt - kan fejle lokalt
-paa Mac uden brew. Paa Railway (Linux) virker det med nixpacks.toml's nixPkgs.
+Importeres lazily fordi WeasyPrint kræver cairo/pango via Nix/apt - kan fejle lokalt
+på Mac uden brew. På Railway (Linux) virker det med nixpacks.toml's nixPkgs.
 """
 
 from pathlib import Path
@@ -20,7 +20,7 @@ def render_html(template: str, payload: dict) -> str:
 
 
 def render_pdf(template: str, payload: dict) -> bytes:
-    """Render HTML-template til PDF-bytes. Kraever WeasyPrint installeret."""
+    """Render HTML-template til PDF-bytes. Kræver WeasyPrint installeret."""
     from weasyprint import HTML  # lazy import - kan fejle uden system-deps
 
     html = render_html(template, payload)

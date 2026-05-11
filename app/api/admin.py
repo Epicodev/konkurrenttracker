@@ -1,12 +1,13 @@
 """Admin-endpoints til drift og debugging.
 
-Bemaerk: ingen auth endnu - kommer i Sprint 04 (HTTP Basic Auth).
+Bemærk: ingen auth endnu - kommer i Sprint 04 (HTTP Basic Auth).
 """
 
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlmodel import Session, func, select
 
 from app.analysis.classifier import classify_pending
@@ -27,6 +28,112 @@ from app.scrapers.wayback import WaybackScraper
 from app.scrapers.web_intel import WebIntelScraper
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_basic_auth)])
+
+
+class CompetitorUpsert(BaseModel):
+    """Felter der kan opdateres via admin-UI. Alle valgfri - kun de udfyldte felter ændres."""
+
+    name: str | None = None
+    cvr: str | None = None
+    domain: str | None = None
+    career_url: str | None = None
+    active: bool | None = None
+    jobindex_query: str | None = None  # genvej til scraper_config['jobindex']['query']
+    google_news_query: str | None = None
+    geo_aliases: str | None = None  # komma-separeret liste
+
+
+def _competitor_to_dict(c: Competitor) -> dict[str, Any]:
+    config = c.scraper_config or {}
+    aliases = (config.get("geo") or {}).get("aliases") or []
+    return {
+        "id": c.id,
+        "slug": c.slug,
+        "name": c.name,
+        "cvr": c.cvr,
+        "domain": c.domain,
+        "career_url": c.career_url,
+        "active": c.active,
+        "jobindex_query": (config.get("jobindex") or {}).get("query"),
+        "google_news_query": (config.get("google_news") or {}).get("query"),
+        "geo_aliases": ", ".join(str(a) for a in aliases),
+    }
+
+
+@router.get("/competitors")
+def admin_list_competitors(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    """Liste alle konkurrenter (også inaktive) med fulde konfig-felter til admin-UI."""
+    rows = list(session.exec(select(Competitor).order_by(Competitor.id)).all())  # type: ignore[union-attr]
+    return [_competitor_to_dict(c) for c in rows]
+
+
+@router.patch("/competitors/{slug}")
+def admin_update_competitor(
+    slug: str,
+    payload: CompetitorUpsert,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Opdater enkelt konkurrent. Kun udfyldte felter ændres."""
+    competitor = session.exec(select(Competitor).where(Competitor.slug == slug)).first()
+    if competitor is None:
+        raise HTTPException(status_code=404, detail=f"konkurrent '{slug}' ikke fundet")
+
+    if payload.name is not None and payload.name.strip():
+        competitor.name = payload.name.strip()[:200]
+    if payload.cvr is not None:
+        cleaned = "".join(ch for ch in payload.cvr if ch.isdigit())
+        competitor.cvr = cleaned[:20] or None
+    if payload.domain is not None:
+        competitor.domain = (payload.domain.strip() or None) if payload.domain else None
+        if competitor.domain:
+            # Strip protocol/path for konsistens - bruges som "hays.dk"
+            d = competitor.domain.replace("https://", "").replace("http://", "").rstrip("/")
+            competitor.domain = d[:200]
+    if payload.career_url is not None:
+        competitor.career_url = (payload.career_url.strip() or None) if payload.career_url else None
+        if competitor.career_url:
+            competitor.career_url = competitor.career_url[:500]
+    if payload.active is not None:
+        competitor.active = payload.active
+
+    # scraper_config flettes ind (queries + aliases) uden at smide andre felter væk
+    config = dict(competitor.scraper_config or {})
+    if payload.jobindex_query is not None:
+        jobindex_cfg = dict(config.get("jobindex") or {})
+        jobindex_cfg["query"] = payload.jobindex_query.strip() or None
+        if jobindex_cfg["query"] is None:
+            jobindex_cfg.pop("query", None)
+        if jobindex_cfg:
+            config["jobindex"] = jobindex_cfg
+        else:
+            config.pop("jobindex", None)
+    if payload.google_news_query is not None:
+        gn_cfg = dict(config.get("google_news") or {})
+        gn_cfg["query"] = payload.google_news_query.strip() or None
+        if gn_cfg["query"] is None:
+            gn_cfg.pop("query", None)
+        if gn_cfg:
+            config["google_news"] = gn_cfg
+        else:
+            config.pop("google_news", None)
+    if payload.geo_aliases is not None:
+        aliases = [a.strip() for a in payload.geo_aliases.split(",") if a.strip()]
+        geo_cfg = dict(config.get("geo") or {})
+        if aliases:
+            geo_cfg["aliases"] = aliases
+            config["geo"] = geo_cfg
+        else:
+            geo_cfg.pop("aliases", None)
+            if geo_cfg:
+                config["geo"] = geo_cfg
+            else:
+                config.pop("geo", None)
+    competitor.scraper_config = config
+
+    session.add(competitor)
+    session.commit()
+    session.refresh(competitor)
+    return _competitor_to_dict(competitor)
 
 
 @router.get("/config-check")
@@ -166,31 +273,31 @@ def _run_scraper(scraper: Any, source: str, session: Session) -> dict[str, Any]:
 
 @router.post("/scrape/jobindex")
 def trigger_jobindex_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koerer Jobindex-scraperen synkront for alle aktive konkurrenter."""
+    """Manuel trigger - kører Jobindex-scraperen synkront for alle aktive konkurrenter."""
     return _run_scraper(JobindexScraper(), "jobindex", session)
 
 
 @router.post("/scrape/cvr")
 def trigger_cvr_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koerer CVR-scraperen synkront for alle aktive konkurrenter med CVR-nummer."""
+    """Manuel trigger - kører CVR-scraperen synkront for alle aktive konkurrenter med CVR-nummer."""
     return _run_scraper(CvrScraper(), "cvr", session)
 
 
 @router.post("/scrape/google_news")
 def trigger_google_news_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koerer Google News-scraperen synkront for alle aktive konkurrenter."""
+    """Manuel trigger - kører Google News-scraperen synkront for alle aktive konkurrenter."""
     return _run_scraper(GoogleNewsScraper(), "google_news", session)
 
 
 @router.post("/scrape/career_sites")
 def trigger_career_sites_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koerer karriere-side scraperen for alle aktive konkurrenter med career_url."""
+    """Manuel trigger - kører karriere-side scraperen for alle aktive konkurrenter med career_url."""
     return _run_scraper(CareerSiteScraper(), "career_page", session)
 
 
 @router.post("/scrape/wayback")
 def trigger_wayback_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koerer wayback (web-snapshot) scraperen for alle aktive konkurrenter."""
+    """Manuel trigger - kører wayback (web-snapshot) scraperen for alle aktive konkurrenter."""
     return _run_scraper(WaybackScraper(), "wayback", session)
 
 
@@ -208,7 +315,7 @@ def trigger_finance_scrape(session: Session = Depends(get_session)) -> dict[str,
 
 @router.post("/scrape/all")
 def trigger_all_scrapers(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koerer alle 7 scrapere sekventielt. Bruges til ad-hoc rapport-trigger."""
+    """Manuel trigger - kører alle 7 scrapere sekventielt. Bruges til ad-hoc rapport-trigger."""
     return {
         "jobindex": _run_scraper(JobindexScraper(), "jobindex", session),
         "cvr": _run_scraper(CvrScraper(), "cvr", session),
@@ -235,7 +342,7 @@ def trigger_synthesize(session: Session = Depends(get_session)) -> dict[str, Any
 
 @router.post("/analyze/geo")
 def trigger_geo_pass(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koer GEO share-of-voice maaling mod Claude."""
+    """Manuel trigger - kør GEO share-of-voice måling mod Claude."""
     return run_geo_pass(session)
 
 
@@ -247,7 +354,7 @@ def trigger_build_report(week: str | None = None) -> dict[str, Any]:
 
 @router.get("/report/preview", response_class=None)
 def preview_report_html(session: Session = Depends(get_session), week: str | None = None) -> Any:
-    """HTML-preview af rapporten uden PDF-rendering. Bruges til at iterere paa template."""
+    """HTML-preview af rapporten uden PDF-rendering. Bruges til at iterere på template."""
     from fastapi.responses import HTMLResponse
 
     payload = build_payload(session, week=week)
@@ -258,8 +365,8 @@ def preview_report_html(session: Session = Depends(get_session), week: str | Non
 def download_report(session: Session = Depends(get_session), week: str | None = None) -> Any:
     """Generer PDF on-demand og returner som download.
 
-    PDF'en regenereres altid fra nuvaerende DB-state - ingen persistent storage noedvendig.
-    Opdaterer ogsaa Report-row med metadata saa arkivet kan vise tidligere downloads.
+    PDF'en regenereres altid fra nuværende DB-state - ingen persistent storage nødvendig.
+    Opdaterer også Report-row med metadata så arkivet kan vise tidligere downloads.
     """
     from datetime import datetime
 

@@ -203,7 +203,7 @@ def trend_jobs_by_category(
     session: Session = Depends(get_session),
     days: int = Query(default=90, le=365),
 ) -> dict[str, Any]:
-    """Antal jobs pr. uge pr. kategori (paa tvaers af alle konkurrenter)."""
+    """Antal jobs pr. uge pr. kategori (på tværs af alle konkurrenter)."""
     cutoff = datetime.utcnow() - timedelta(days=days)
     rows = list(session.exec(select(JobPosting).where(JobPosting.first_seen_at >= cutoff)).all())
     series: dict[str, dict[str, int]] = {}
@@ -323,7 +323,7 @@ def _finance_row(report: FinancialReport, competitor: Competitor) -> dict[str, A
 
 @router.get("/finance/latest")
 def finance_latest(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
-    """Seneste regnskab pr. konkurrent + YoY-vaekst hvis aaret foer er tilgaengeligt."""
+    """Seneste regnskab pr. konkurrent + YoY-vækst hvis året før er tilgængeligt."""
     rows = list(
         session.exec(
             select(FinancialReport, Competitor)
@@ -342,7 +342,7 @@ def finance_latest(session: Session = Depends(get_session)) -> list[dict[str, An
         latest, competitor = reports[0]
         prior = reports[1][0] if len(reports) > 1 else None
         data = _finance_row(latest, competitor)
-        # YoY-vaekst hvis baade nuvaerende OG forrige har omsaetning
+        # YoY-vækst hvis både nuværende OG forrige har omsætning
         if prior and latest.revenue and prior.revenue:
             data["revenue_yoy"] = (latest.revenue - prior.revenue) / prior.revenue
         else:

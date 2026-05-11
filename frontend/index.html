@@ -62,6 +62,15 @@
     .num { text-align: right; font-variant-numeric: tabular-nums; }
     .finance-table th, .finance-table td { padding: 6px 10px; font-size: 13px; }
     .finance-table tr:hover { background: #fafafa; }
+    .admin-table input { width: 100%; padding: 4px 6px; font-size: 12px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box; }
+    .admin-table input:focus { border-color: #b41018; outline: none; }
+    .admin-table td { padding: 4px 6px; vertical-align: middle; }
+    .admin-table .btn-save { padding: 4px 10px; background: #1a7a1a; color: white; border: 0; border-radius: 3px; font-size: 12px; cursor: pointer; }
+    .admin-table .btn-save:disabled { background: #aaa; cursor: not-allowed; }
+    .admin-table .row-status { font-size: 11px; margin-left: 6px; }
+    .row-status.ok { color: #1a7a1a; }
+    .row-status.err { color: #b41018; }
+    .admin-active { display: flex; align-items: center; gap: 4px; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -72,23 +81,23 @@
   <details class="info">
     <summary>Hvad kigger systemet efter?</summary>
     <div class="info-body">
-      <p>Hver konkurrent overvaages via 5 gratis datakilder. Raa data klassificeres af Claude Haiku, og en gang om ugen finder Claude Sonnet de 4-6 vigtigste signaler.</p>
+      <p>Hver konkurrent overvåges via 5 gratis datakilder. Rå data klassificeres af Claude Haiku, og en gang om ugen finder Claude Sonnet de 4-6 vigtigste signaler.</p>
 
       <h4>Datakilder</h4>
       <table class="info-table">
         <tr><td>Jobindex RSS</td><td>Nye jobopslag pr. konkurrent (firmanavn skal forekomme i titel/beskrivelse).</td></tr>
         <tr><td>Karriere-sider</td><td>Konkurrentens egen jobside parses for nye opslag (CSS-selectors pr. konkurrent).</td></tr>
-        <tr><td>CVR-API</td><td>Aendringer i navn, adresse, ansatte, branche, kreditstatus, konkurs m.m.</td></tr>
+        <tr><td>CVR-API</td><td>Ændringer i navn, adresse, ansatte, branche, kreditstatus, konkurs m.m.</td></tr>
         <tr><td>Google News</td><td>Danske nyhedsartikler om konkurrenten.</td></tr>
-        <tr><td>Web-snapshot</td><td>Forsiden hash'es og diff'es - aendringer paa minimum 200 tegn registreres.</td></tr>
-        <tr><td>Web-intel</td><td>Tech-stack (ATS, CMS, analytics, marketing-tools) + sitemap-velocity. Detekterer fx skift fra Workday til Greenhouse, eller pludselig vaekst i blog-content.</td></tr>
-        <tr><td>Regnskaber (virk.dk)</td><td>Officielle aarsregnskaber via Erhvervsstyrelsens distribution-API. XBRL parses til omsaetning, resultat, egenkapital, balancesum, ansatte. YoY, margin og soliditet beregnes.</td></tr>
-        <tr><td>GEO (AI-soegning)</td><td>10 realistiske brugerspoergsmaal stilles til Claude. Vi maaler "share of voice" - hvor ofte hver konkurrent bliver naevnt + sentiment.</td></tr>
+        <tr><td>Web-snapshot</td><td>Forsiden hash'es og diff'es - ændringer på minimum 200 tegn registreres.</td></tr>
+        <tr><td>Web-intel</td><td>Tech-stack (ATS, CMS, analytics, marketing-tools) + sitemap-velocity. Detekterer fx skift fra Workday til Greenhouse, eller pludselig vækst i blog-content.</td></tr>
+        <tr><td>Regnskaber (virk.dk)</td><td>Officielle årsregnskaber via Erhvervsstyrelsens distribution-API. XBRL parses til omsætning, resultat, egenkapital, balancesum, ansatte. YoY, margin og soliditet beregnes.</td></tr>
+        <tr><td>GEO (AI-søgning)</td><td>10 realistiske brugerspørgsmål stilles til Claude. Vi måler "share of voice" - hvor ofte hver konkurrent bliver nævnt + sentiment.</td></tr>
       </table>
 
       <h4>Klassificering af jobopslag (Haiku)</h4>
       <ul>
-        <li><strong>Fagomraade:</strong> Backend, Frontend, Data Science, Cloud/DevOps, Salg, HR, Projektledelse, Konsulent, Marketing, Oekonomi, Andet</li>
+        <li><strong>Fagområde:</strong> Backend, Frontend, Data Science, Cloud/DevOps, Salg, HR, Projektledelse, Konsulent, Marketing, Økonomi, Andet</li>
         <li><strong>Seniority:</strong> junior / mid / senior</li>
         <li><strong>Freelance:</strong> ja/nej</li>
       </ul>
@@ -96,20 +105,20 @@
       <h4>Ugentlige signaler (Sonnet)</h4>
       <p>Sonnet leder eksplicit efter:</p>
       <ul>
-        <li><strong>Volumen-spike</strong> &mdash; konkurrent har 3x saa mange roller af en type som normalt</li>
+        <li><strong>Volumen-spike</strong> &mdash; konkurrent har 3x så mange roller af en type som normalt</li>
         <li><strong>Niveau-skift</strong> &mdash; junior- til senior-roller (opskalering)</li>
-        <li><strong>Geografisk skift</strong> &mdash; aabner i nyt omraade</li>
-        <li><strong>Fag-koncentration</strong> &mdash; satser paa nyt domaene (AI, ML, security)</li>
-        <li><strong>Korrelation</strong> &mdash; senior-hires + funding-omtale = vaekstfase</li>
+        <li><strong>Geografisk skift</strong> &mdash; åbner i nyt område</li>
+        <li><strong>Fag-koncentration</strong> &mdash; satser på nyt domæne (AI, ML, security)</li>
+        <li><strong>Korrelation</strong> &mdash; senior-hires + funding-omtale = vækstfase</li>
       </ul>
-      <p>Hvert signal faar severity (<code>urgent</code> / <code>signal</code> / <code>opportunity</code>) og en ansvarlig (Talent / Sales / Marketing / CEO). <strong>Urgent</strong>-signaler postes ogsaa direkte til Slack hvis webhook er konfigureret.</p>
+      <p>Hvert signal får severity (<code>urgent</code> / <code>signal</code> / <code>opportunity</code>) og en ansvarlig (Talent / Sales / Marketing / CEO). <strong>Urgent</strong>-signaler postes også direkte til Slack hvis webhook er konfigureret.</p>
     </div>
   </details>
 
   <div style="margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-    <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Koer alle scrapere</button>
+    <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Kør alle scrapere</button>
     <button id="btn-finance" style="padding: 8px 14px; background: #1a7a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent regnskaber</button>
-    <button id="btn-geo" style="padding: 8px 14px; background: #6a3fb5; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Maal AI-synlighed (GEO)</button>
+    <button id="btn-geo" style="padding: 8px 14px; background: #6a3fb5; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Mål AI-synlighed (GEO)</button>
     <button id="btn-synthesize" style="padding: 8px 14px; background: #b41018; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer signaler (Sonnet)</button>
     <button id="btn-report" style="padding: 8px 14px; background: #0066cc; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent rapport som PDF</button>
     <span id="action-status" style="font-size: 13px; color: #666; margin-left: 8px;"></span>
@@ -119,12 +128,13 @@
 
   <div class="tabs">
     <button class="tab active" data-tab="signals">Signaler</button>
-    <button class="tab" data-tab="finance">Oekonomi</button>
+    <button class="tab" data-tab="finance">Økonomi</button>
     <button class="tab" data-tab="trends">Trends</button>
     <button class="tab" data-tab="geo">GEO (AI-synlighed)</button>
     <button class="tab" data-tab="jobs">Jobopslag</button>
     <button class="tab" data-tab="events">Firma-events</button>
     <button class="tab" data-tab="reports">Rapporter</button>
+    <button class="tab" data-tab="competitors">Konkurrenter</button>
   </div>
 
   <div class="filters">
@@ -153,7 +163,7 @@
     }
 
     function renderSignals(rows) {
-      if (!rows.length) return `<div class="empty">Ingen signaler endnu. Koer POST /admin/analyze/synthesize.</div>`;
+      if (!rows.length) return `<div class="empty">Ingen signaler endnu. Kør POST /admin/analyze/synthesize.</div>`;
       return `<table><thead><tr><th>Uge</th><th>Konkurrent</th><th>Severity</th><th>Titel</th><th>Action</th><th>Owner</th></tr></thead><tbody>
         ${rows.map(s => `<tr>
           <td>${s.week}</td>
@@ -193,7 +203,7 @@
       </tbody></table>`;
     }
 
-    // Chart-instanser holdes i scope saa vi kan destroy() dem ved re-render
+    // Chart-instanser holdes i scope så vi kan destroy() dem ved re-render
     const charts = {};
 
     function paletteColor(idx) {
@@ -213,13 +223,13 @@
           <div class="chart-wrap"><canvas id="chart-jobs-comp"></canvas></div>
         </div>
         <div class="chart-card">
-          <h3>Jobopslag pr. uge - pr. fagomraade</h3>
+          <h3>Jobopslag pr. uge - pr. fagområde</h3>
           <div class="chart-sub">Sidste 90 dage. Viser om markedet flytter sig (fx mod AI/ML eller cloud).</div>
           <div class="chart-wrap"><canvas id="chart-jobs-cat"></canvas></div>
         </div>
         <div class="chart-card">
           <h3>GEO share-of-voice over tid</h3>
-          <div class="chart-sub">Hvor stor en andel af AI-svar paa rekrutterings/konsulent-spoergsmaal naevner hver konkurrent.</div>
+          <div class="chart-sub">Hvor stor en andel af AI-svar på rekrutterings/konsulent-spørgsmål nævner hver konkurrent.</div>
           <div class="chart-wrap"><canvas id="chart-geo"></canvas></div>
         </div>
       `;
@@ -322,6 +332,93 @@
       return `<svg class="sparkline" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${polylines}</svg>`;
     }
 
+    function escapeHtml(s) {
+      if (s === null || s === undefined) return "";
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    async function renderCompetitors() {
+      let rows;
+      try {
+        rows = await fetchJSON("/admin/competitors");
+      } catch (err) {
+        document.getElementById("content").innerHTML = `<div class="empty">Fejl: ${err.message}</div>`;
+        return;
+      }
+      const html = `
+        <div style="margin-bottom:12px;color:#666;font-size:13px;">
+          Rediger CVR, domæne, karriere-URL og scraper-konfiguration pr. konkurrent.
+          CVR er nødvendigt for at hente regnskaber. Domæne er nødvendigt for web-intel og web-snapshot.
+          Klik "Gem" på en række for at gemme ændringer.
+        </div>
+        <table class="admin-table">
+          <thead><tr>
+            <th>Navn</th>
+            <th style="width:110px">CVR</th>
+            <th style="width:140px">Domæne</th>
+            <th style="width:200px">Karriere-URL</th>
+            <th style="width:130px">Jobindex query</th>
+            <th style="width:130px">Google News query</th>
+            <th style="width:160px">GEO aliasser (komma)</th>
+            <th style="width:60px">Aktiv</th>
+            <th style="width:110px"></th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(c => `
+              <tr data-slug="${c.slug}">
+                <td><input data-field="name" value="${escapeHtml(c.name)}"></td>
+                <td><input data-field="cvr" value="${escapeHtml(c.cvr || "")}" placeholder="8 cifre"></td>
+                <td><input data-field="domain" value="${escapeHtml(c.domain || "")}" placeholder="firma.dk"></td>
+                <td><input data-field="career_url" value="${escapeHtml(c.career_url || "")}" placeholder="https://..."></td>
+                <td><input data-field="jobindex_query" value="${escapeHtml(c.jobindex_query || "")}"></td>
+                <td><input data-field="google_news_query" value="${escapeHtml(c.google_news_query || "")}"></td>
+                <td><input data-field="geo_aliases" value="${escapeHtml(c.geo_aliases || "")}" placeholder="ProData, emagine"></td>
+                <td class="admin-active"><input type="checkbox" data-field="active" ${c.active ? "checked" : ""}></td>
+                <td>
+                  <button class="btn-save" data-slug="${c.slug}">Gem</button>
+                  <span class="row-status"></span>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+      document.getElementById("content").innerHTML = html;
+
+      // Tilknyt save-handlers
+      document.querySelectorAll(".btn-save").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const slug = btn.dataset.slug;
+          const row = document.querySelector(`tr[data-slug="${slug}"]`);
+          const status = row.querySelector(".row-status");
+          const payload = {};
+          row.querySelectorAll("[data-field]").forEach(input => {
+            const f = input.dataset.field;
+            payload[f] = input.type === "checkbox" ? input.checked : input.value;
+          });
+          btn.disabled = true;
+          status.textContent = "Gemmer...";
+          status.className = "row-status";
+          try {
+            const res = await fetch(`/admin/competitors/${encodeURIComponent(slug)}`, {
+              method: "PATCH",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            status.textContent = "✓ Gemt";
+            status.className = "row-status ok";
+            setTimeout(() => { status.textContent = ""; }, 2500);
+          } catch (err) {
+            status.textContent = "✗ " + err.message;
+            status.className = "row-status err";
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
     async function renderFinance() {
       let latest, history;
       try {
@@ -335,7 +432,7 @@
       }
       if (!latest.length) {
         document.getElementById("content").innerHTML = `<div class="empty">
-          Ingen regnskaber hentet endnu. Klik "Hent regnskaber" oeverst for at koere foerste pass mod virk.dk.
+          Ingen regnskaber hentet endnu. Klik "Hent regnskaber" øverst for at køre første pass mod virk.dk.
         </div>`;
         return;
       }
@@ -346,21 +443,21 @@
       document.getElementById("content").innerHTML = `
         <div style="margin-bottom:12px;color:#666;font-size:13px;">
           Officielle regnskaber hentet fra <code>distribution.virk.dk</code>. Alle tal i DKK.
-          ${latest[0].fiscal_year ? `Seneste regnskabsaar varierer pr. konkurrent.` : ""}
+          ${latest[0].fiscal_year ? `Seneste regnskabsår varierer pr. konkurrent.` : ""}
         </div>
         <table class="finance-table">
           <thead><tr>
             <th>Konkurrent</th>
-            <th>Regnskabsaar</th>
-            <th class="num">Omsaetning</th>
+            <th>Regnskabsår</th>
+            <th class="num">Omsætning</th>
             <th class="num">YoY</th>
-            <th class="num">Aarets resultat</th>
+            <th class="num">Årets resultat</th>
             <th class="num">Margin</th>
             <th class="num">Egenkapital</th>
             <th class="num">Soliditet</th>
             <th class="num">Ansatte</th>
-            <th class="num">Omsaet./FTE</th>
-            <th>Trend (omsaet/resultat)</th>
+            <th class="num">Omsæt./FTE</th>
+            <th>Trend (omsæt/resultat)</th>
             <th>PDF</th>
           </tr></thead>
           <tbody>
@@ -387,9 +484,9 @@
           </tbody>
         </table>
         <p style="margin-top:14px;font-size:12px;color:#888;">
-          <strong>Bemaerk:</strong> Mindre selskaber (Klasse B) maa lovligt undlade at rapportere omsaetning - de viser kun bruttoresultat.
-          YoY og margin udregnes derfor kun hvor omsaetningstal findes for begge aar.
-          Soliditet = egenkapital / balancesum. Bla streg = omsaetning. Roed streg = resultat.
+          <strong>Bemærk:</strong> Mindre selskaber (Klasse B) må lovligt undlade at rapportere omsætning - de viser kun bruttoresultat.
+          YoY og margin udregnes derfor kun hvor omsætningstal findes for begge år.
+          Soliditet = egenkapital / balancesum. Bla streg = omsætning. Rød streg = resultat.
         </p>
       `;
     }
@@ -404,15 +501,15 @@
       }
       if (!data.rows || !data.rows.length) {
         document.getElementById("content").innerHTML = `<div class="empty">
-          Ingen GEO-maalinger endnu. Klik "Maal AI-synlighed (GEO)" oeverst for at koere foerste pass.
-          (Kraever ANTHROPIC_API_KEY)
+          Ingen GEO-målinger endnu. Klik "Mål AI-synlighed (GEO)" øverst for at køre første pass.
+          (Kræver ANTHROPIC_API_KEY)
         </div>`;
         return;
       }
       document.getElementById("content").innerHTML = `
         <div style="margin-bottom: 16px; color: #666; font-size: 13px;">
-          Uge <strong>${data.week}</strong> &middot; ${data.rows[0].total_queries} brugerspoergsmaal stillet til Claude.
-          "Share of voice" = andel af svar hvor konkurrenten naevnes.
+          Uge <strong>${data.week}</strong> &middot; ${data.rows[0].total_queries} brugerspørgsmål stillet til Claude.
+          "Share of voice" = andel af svar hvor konkurrenten nævnes.
         </div>
         <table>
           <thead><tr><th>Konkurrent</th><th>Mentions</th><th>Share of voice</th><th>Sentiment</th><th>Eksempler</th></tr></thead>
@@ -440,7 +537,7 @@
       const downloadBtn = (week) => `<a href="/admin/report/download?week=${encodeURIComponent(week)}" style="display:inline-block;padding:4px 10px;background:#0066cc;color:white;text-decoration:none;border-radius:3px;font-size:12px;">Download PDF</a>`;
       if (!rows.length) {
         return `<div class="empty">
-          Ingen rapporter genereret endnu. Klik "Hent rapport som PDF" oeverst for at generere ugens rapport,
+          Ingen rapporter genereret endnu. Klik "Hent rapport som PDF" øverst for at generere ugens rapport,
           eller brug knappen herunder til at hente specifikke uger.<br><br>
           ${downloadBtn(currentWeek())}
         </div>`;
@@ -472,13 +569,14 @@
     }
 
     async function refresh() {
-      // Vis/skjul kompetitor-filteret afhaengigt af tab
-      const noFilterTabs = new Set(["reports", "trends", "geo", "finance"]);
+      // Vis/skjul kompetitor-filteret afhængigt af tab
+      const noFilterTabs = new Set(["reports", "trends", "geo", "finance", "competitors"]);
       document.querySelector(".filters").style.display = noFilterTabs.has(state.tab) ? "none" : "flex";
 
       if (state.tab === "trends") return renderTrends();
       if (state.tab === "geo") return renderGeo();
       if (state.tab === "finance") return renderFinance();
+      if (state.tab === "competitors") return renderCompetitors();
 
       const params = state.competitor ? `?competitor=${encodeURIComponent(state.competitor)}` : "";
       const path = { signals: "/api/signals", jobs: "/api/jobs", events: "/api/events", reports: "/admin/reports" }[state.tab];
@@ -493,16 +591,16 @@
     }
 
     function summarizeResult(label, data) {
-      // Pretty-print de mest relevante felter afhaengigt af hvilket endpoint der blev kaldt
+      // Pretty-print de mest relevante felter afhængigt af hvilket endpoint der blev kaldt
       if (data.results) {
         const total = data.total_added;
-        return `${label}: ${total} ny(e) tilfoejet (${data.competitors_processed} konkurrenter)`;
+        return `${label}: ${total} ny(e) tilføjet (${data.competitors_processed} konkurrenter)`;
       }
       if (data.signals_added !== undefined) {
-        return `${label}: ${data.signals_added} signaler tilfoejet${data.reason ? ` (${data.reason})` : ""}`;
+        return `${label}: ${data.signals_added} signaler tilføjet${data.reason ? ` (${data.reason})` : ""}`;
       }
       if (data.competitors_tracked !== undefined) {
-        return `${label}: ${data.competitors_tracked} konkurrenter maalt over ${data.runs} prompts (uge ${data.week || "-"})${data.reason ? ` - ${data.reason}` : ""}`;
+        return `${label}: ${data.competitors_tracked} konkurrenter målt over ${data.runs} prompts (uge ${data.week || "-"})${data.reason ? ` - ${data.reason}` : ""}`;
       }
       if (data.pdf_size_kb !== undefined) {
         const mailInfo = data.mail.skipped ? `(mail skipped: ${data.mail.reason})` : `(mail sendt til ${data.mail.sent})`;
@@ -513,7 +611,7 @@
       if (sources.length) {
         return `${label}: ` + sources.map(([k, v]) => `${k}=${v.total_added}`).join(", ");
       }
-      return `${label} faerdig`;
+      return `${label} færdig`;
     }
 
     async function refreshStats() {
@@ -527,7 +625,7 @@
 
     async function triggerAction(label, path) {
       const status = document.getElementById("action-status");
-      status.textContent = `${label} koerer... (kan tage 30-60 sek)`;
+      status.textContent = `${label} kører... (kan tage 30-60 sek)`;
       try {
         const res = await fetch(path, { method: "POST" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -554,14 +652,14 @@
         document.getElementById("btn-report").addEventListener("click", () => {
           const status = document.getElementById("action-status");
           status.textContent = "Genererer PDF... (kan tage 10-30 sek)";
-          // Programatisk download uden at navigere vaek fra siden
+          // Programatisk download uden at navigere væk fra siden
           const a = document.createElement("a");
           a.href = `/admin/report/download?week=${currentWeek()}`;
           a.download = "";
           document.body.appendChild(a);
           a.click();
           a.remove();
-          // Vent paa download starter foer vi opdaterer UI
+          // Vent på download starter før vi opdaterer UI
           setTimeout(() => {
             status.textContent = "PDF hentet (tjek din downloads-mappe).";
             refreshStats();
@@ -578,7 +676,7 @@
         });
         refresh();
       } catch (err) {
-        document.body.innerHTML = `<h1>Login kraevet</h1><p>Reload siden og indtast brugernavn/password.</p><pre>${err.message}</pre>`;
+        document.body.innerHTML = `<h1>Login krævet</h1><p>Reload siden og indtast brugernavn/password.</p><pre>${err.message}</pre>`;
       }
     }
     init();

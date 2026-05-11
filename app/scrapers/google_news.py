@@ -4,7 +4,7 @@ Henter https://news.google.com/rss/search?q=<query>&hl=da&gl=DK&ceid=DK:da pr. k
 Gemmer hver artikel som CompanyEvent (event_type='news', source='google_news').
 
 Post-fetch filter: ligesom Jobindex returnerer Google News tangentielle resultater,
-saa vi kraever at query-termen forekommer i title eller description.
+så vi kræver at query-termen forekommer i title eller description.
 """
 
 from datetime import datetime

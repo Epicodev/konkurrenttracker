@@ -13,11 +13,11 @@ class FinancialReport(SQLModel, table=True):
     # Regnskabsperiode
     fiscal_year_start: date | None = None
     fiscal_year_end: date = Field(index=True)
-    # Noegletal i kroner (DKK) - alle kan vaere None hvis ikke rapporteret
-    revenue: float | None = None  # Omsaetning (Revenue)
+    # Nøgletal i kroner (DKK) - alle kan være None hvis ikke rapporteret
+    revenue: float | None = None  # Omsætning (Revenue)
     gross_profit: float | None = None  # Bruttoresultat (GrossProfitLoss)
-    profit_loss: float | None = None  # Aarets resultat (ProfitLoss)
-    employee_expenses: float | None = None  # Loenudgifter (EmployeeBenefitsExpense)
+    profit_loss: float | None = None  # Årets resultat (ProfitLoss)
+    employee_expenses: float | None = None  # Lønudgifter (EmployeeBenefitsExpense)
     equity: float | None = None  # Egenkapital (Equity)
     assets: float | None = None  # Balancesum (Assets)
     average_employees: int | None = None  # Gennemsnitligt antal ansatte

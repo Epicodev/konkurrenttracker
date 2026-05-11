@@ -21,22 +21,22 @@ class ScrapeResult:
 
 
 class Scraper(ABC):
-    """Faelles interface for alle scrapere.
+    """Fælles interface for alle scrapere.
 
-    Hver scraper koerer mod EN konkurrent ad gangen og er ansvarlig for at:
+    Hver scraper kører mod EN konkurrent ad gangen og er ansvarlig for at:
     - Hente raw data fra sin kilde
     - Persistere nye rows (idempotent via unique constraints i modellerne)
-    - Returnere et ScrapeResult med taellinger og evt. fejl
+    - Returnere et ScrapeResult med tællinger og evt. fejl
     """
 
     source: str  # fx "jobindex", "cvr", "google_news"
 
     @abstractmethod
     def scrape(self, competitor: Competitor, session: Session) -> ScrapeResult:
-        """Scrape EN konkurrent. Skal vaere idempotent (genkoersel = ingen duplikater)."""
+        """Scrape EN konkurrent. Skal være idempotent (genkørsel = ingen duplikater)."""
 
     def safe_scrape(self, competitor: Competitor, session: Session) -> ScrapeResult:
-        """Wrapper der fanger exceptions saa en daarlig konkurrent ikke staekker hele cron-jobbet."""
+        """Wrapper der fanger exceptions så en dårlig konkurrent ikke stækker hele cron-jobbet."""
         try:
             return self.scrape(competitor, session)
         except Exception as exc:  # noqa: BLE001
@@ -51,8 +51,8 @@ class Scraper(ABC):
 def jobindex_query_for(competitor: Competitor) -> str | None:
     """Returner eksplicit query fra scraper_config['jobindex']['query'], eller None hvis ikke konfigureret.
 
-    Vi falder IKKE tilbage til competitor.name fordi Jobindex laver OR-match paa multiword queries,
-    hvilket giver fallback-resultater for placeholders. Bedre at springe over end at gemme stoej.
+    Vi falder IKKE tilbage til competitor.name fordi Jobindex laver OR-match på multiword queries,
+    hvilket giver fallback-resultater for placeholders. Bedre at springe over end at gemme støj.
     """
     config: dict[str, Any] = competitor.scraper_config or {}
     explicit = config.get("jobindex", {}).get("query")

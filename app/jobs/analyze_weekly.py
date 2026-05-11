@@ -1,4 +1,4 @@
-"""Cron-entrypoint: koerer ugentlig analyse - klassificer + syntetiser.
+"""Cron-entrypoint: kører ugentlig analyse - klassificer + syntetiser.
 
 Koeres som: python -m app.jobs.analyze_weekly
 """

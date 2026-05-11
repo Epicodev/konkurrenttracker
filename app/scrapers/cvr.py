@@ -1,10 +1,10 @@
 """CVR-scraper.
 
 Henter virksomhedsdata fra cvrapi.dk for hver konkurrent med et CVR-nummer.
-Detekterer aendringer ved at sammenligne med seneste cvr-event for samme konkurrent.
+Detekterer ændringer ved at sammenligne med seneste cvr-event for samme konkurrent.
 
-Foerste koersel pr. konkurrent = "cvr_baseline". Efterfoelgende = "cvr_change" hvis
-relevante felter er aendret, ellers ingen ny event (saa tabellen ikke fyldes med ikke-events).
+Første kørsel pr. konkurrent = "cvr_baseline". Efterfølgende = "cvr_change" hvis
+relevante felter er ændret, ellers ingen ny event (så tabellen ikke fyldes med ikke-events).
 """
 
 from datetime import datetime
@@ -21,9 +21,9 @@ logger = structlog.get_logger(__name__)
 
 API_URL = "https://cvrapi.dk/api"
 HTTP_TIMEOUT = 20.0
-USER_AGENT = "konkurrenttracker (epico.dk)"  # cvrapi.dk kraever User-Agent
+USER_AGENT = "konkurrenttracker (epico.dk)"  # cvrapi.dk kræver User-Agent
 
-# Felter vi sammenligner mellem koerseler. Aendringer i andre felter ignoreres.
+# Felter vi sammenligner mellem kørsler. Ændringer i andre felter ignoreres.
 TRACKED_FIELDS = (
     "name",
     "address",
@@ -88,7 +88,7 @@ class CvrScraper(Scraper):
                     event_type="cvr_baseline",
                     source=self.source,
                     title=f"CVR-baseline: {data.get('name', competitor.name)}",
-                    description=f"Foerste registrering. {data.get('employees') or '?'} ansatte, "
+                    description=f"Første registrering. {data.get('employees') or '?'} ansatte, "
                     f"{data.get('industrydesc', 'ukendt branche')}.",
                     raw_data=data,
                     detected_at=now,
@@ -110,7 +110,7 @@ class CvrScraper(Scraper):
                 competitor_id=competitor.id,  # type: ignore[arg-type]
                 event_type="cvr_change",
                 source=self.source,
-                title=f"CVR-aendring: {data.get('name', competitor.name)}",
+                title=f"CVR-ændring: {data.get('name', competitor.name)}",
                 description=change_summary[:1000],
                 raw_data={"current": data, "changes": changes},
                 detected_at=now,

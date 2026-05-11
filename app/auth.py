@@ -24,7 +24,7 @@ def require_basic_auth(credentials: HTTPBasicCredentials | None = Depends(securi
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Login kraevet",
+            detail="Login krævet",
             headers={"WWW-Authenticate": 'Basic realm="konkurrenttracker", charset="UTF-8"'},
         )
     user_ok = secrets.compare_digest(credentials.username.encode(), expected_user.encode())

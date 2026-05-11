@@ -41,13 +41,13 @@ def healthz(session: Session = Depends(get_session)) -> dict[str, str | int]:
     return {"status": "ok", "competitors": competitor_count}
 
 
-# Mount frontend som statiske filer paa rod-pathen.
-# StaticFiles haandterer index.html for "/" og "/dashboard" - resten falder igennem til API-routes.
+# Mount frontend som statiske filer på rod-pathen.
+# StaticFiles håndterer index.html for "/" og "/dashboard" - resten falder igennem til API-routes.
 if FRONTEND_DIR.exists():
     @app.get("/")
     @app.get("/dashboard")
     def dashboard() -> FileResponse:
-        # No-cache saa browseren altid henter friskeste version efter hver deploy.
+        # No-cache så browseren altid henter friskeste version efter hver deploy.
         return FileResponse(
             FRONTEND_DIR / "index.html",
             headers={"Cache-Control": "no-cache, no-store, must-revalidate"},

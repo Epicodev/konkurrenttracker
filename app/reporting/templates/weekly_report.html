@@ -37,13 +37,13 @@
 <body>
 
 <section class="cover">
-  <h1>Konkurrentovervaagning</h1>
+  <h1>Konkurrentovervågning</h1>
   <div class="tagline">Uge {{ week }} · {{ generated_date }}</div>
   {% if top_tagline %}<p style="margin-top:40pt;font-size:13pt">{{ top_tagline }}</p>{% endif %}
 </section>
 
 <h2>Executive summary</h2>
-<p>I uge {{ week }} blev der registreret <strong>{{ stats.jobs_last_7d }}</strong> nye jobopslag og <strong>{{ stats.events_last_7d }}</strong> firma-events fordelt paa {{ stats.competitors }} konkurrenter. Claude har udvalgt <strong>{{ signals|length }}</strong> prioriterede signaler.</p>
+<p>I uge {{ week }} blev der registreret <strong>{{ stats.jobs_last_7d }}</strong> nye jobopslag og <strong>{{ stats.events_last_7d }}</strong> firma-events fordelt på {{ stats.competitors }} konkurrenter. Claude har udvalgt <strong>{{ signals|length }}</strong> prioriterede signaler.</p>
 
 <div class="stats">
   <div class="stat"><div class="stat-value">{{ stats.jobs_last_7d }}</div><div class="stat-label">Jobopslag</div></div>
@@ -69,7 +69,7 @@
 <p class="muted">Ingen signaler i denne uge.</p>
 {% endif %}
 
-<h2>Domaene 01 · Jobopslag</h2>
+<h2>Domæne 01 · Jobopslag</h2>
 {% if jobs_by_competitor %}
 <table>
   <thead><tr><th>Konkurrent</th><th>Antal</th><th>Top kategorier</th><th>Senior/Junior</th></tr></thead>
@@ -88,7 +88,7 @@
 <p class="muted">Ingen jobopslag i ugen.</p>
 {% endif %}
 
-<h2>Domaene 02 · Firmaaendringer</h2>
+<h2>Domæne 02 · Firmaændringer</h2>
 {% if recent_events %}
 <table>
   <thead><tr><th>Dato</th><th>Konkurrent</th><th>Type</th><th>Beskrivelse</th></tr></thead>
@@ -107,13 +107,13 @@
 <p class="muted">Ingen firma-events i ugen.</p>
 {% endif %}
 
-<h2>Domaene 03 · Web &amp; sentiment</h2>
+<h2>Domæne 03 · Web &amp; sentiment</h2>
 {% if web_changes %}
 <ul>
 {% for w in web_changes %}<li><strong>{{ w.competitor_name }}</strong>: {{ w.title }}<br><span class="muted">{{ w.description }}</span></li>{% endfor %}
 </ul>
 {% else %}
-<p class="muted">Ingen web-aendringer registreret i ugen.</p>
+<p class="muted">Ingen web-ændringer registreret i ugen.</p>
 {% endif %}
 
 </body>

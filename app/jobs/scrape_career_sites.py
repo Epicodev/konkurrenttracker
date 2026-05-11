@@ -1,4 +1,4 @@
-"""Cron-entrypoint: koer career-site scraperen for alle aktive konkurrenter med career_url.
+"""Cron-entrypoint: kør career-site scraperen for alle aktive konkurrenter med career_url.
 
 Koeres som: python -m app.jobs.scrape_career_sites
 """

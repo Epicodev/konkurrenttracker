@@ -1,7 +1,7 @@
 """Haiku-baseret klassificering af jobopslag.
 
 Henter opslag uden category/seniority og kalder Claude Haiku 4.5 for at udlede
-felter. System-prompt cachees via prompt-caching for at saenke per-call cost.
+felter. System-prompt cachees via prompt-caching for at sænke per-call cost.
 
 Hvis ANTHROPIC_API_KEY ikke er sat: skipper aabnt med en advarsel (lokal dev).
 """

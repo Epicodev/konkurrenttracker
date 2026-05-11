@@ -1,6 +1,6 @@
 """Sonnet-baseret ugentlig syntese.
 
-Tager ugens jobopslag + firma-events, sender til Claude Sonnet 4.6 og faar
+Tager ugens jobopslag + firma-events, sender til Claude Sonnet 4.6 og får
 4-6 prioriterede signaler tilbage. Gemmer som Signal-rows.
 """
 
@@ -116,7 +116,7 @@ def synthesize_week(session: Session, days_back: int = 7) -> dict[str, Any]:
         messages=[
             {
                 "role": "user",
-                "content": f"Ugens raa data:\n\n```json\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n```",
+                "content": f"Ugens rå data:\n\n```json\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n```",
             }
         ],
     )
@@ -130,7 +130,7 @@ def synthesize_week(session: Session, days_back: int = 7) -> dict[str, Any]:
         logger.exception("synthesize.invalid_json", error=str(exc), raw=text[:500])
         return {"signals_added": 0, "reason": "invalid_json"}
 
-    # Slet eksisterende signaler for samme uge for at undgaa duplikater ved gen-koersel
+    # Slet eksisterende signaler for samme uge for at undgå duplikater ved gen-kørsel
     for old in session.exec(select(Signal).where(Signal.week == week)).all():
         session.delete(old)
 

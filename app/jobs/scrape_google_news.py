@@ -1,4 +1,4 @@
-"""Cron-entrypoint: koer Google News-scraperen for alle aktive konkurrenter med query.
+"""Cron-entrypoint: kør Google News-scraperen for alle aktive konkurrenter med query.
 
 Koeres som: python -m app.jobs.scrape_google_news
 """

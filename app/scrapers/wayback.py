@@ -24,7 +24,7 @@ logger = structlog.get_logger(__name__)
 
 HTTP_TIMEOUT = 30.0
 USER_AGENT = "Mozilla/5.0 (compatible; konkurrenttracker/1.0; +https://epico.dk)"
-# Min. aendret antal tegn foer vi gemmer en change-event - undgaa stoej fra timestamps/CSRF tokens
+# Min. ændret antal tegn før vi gemmer en change-event - undgå støj fra timestamps/CSRF tokens
 SIGNIFICANT_CHANGE_THRESHOLD = 200
 SNAPSHOT_MAX_BYTES = 50_000  # gem max 50KB raw_data pr. snapshot
 
@@ -47,7 +47,7 @@ def _extract_text(html: str) -> str:
     for tag in soup(["script", "style", "noscript", "meta", "link"]):
         tag.decompose()
     text = soup.get_text(separator="\n", strip=True)
-    # Normaliser whitespace - undgaa flueknepperi paa tomme linjer
+    # Normaliser whitespace - undgå flueknepperi på tomme linjer
     text = re.sub(r"\n{2,}", "\n", text)
     return text
 
@@ -64,8 +64,8 @@ def _summarize_diff(before: str, after: str) -> str:
     added = [line for line in diff_lines if line.startswith("+") and not line.startswith("+++")]
     removed = [line for line in diff_lines if line.startswith("-") and not line.startswith("---")]
     summary = (
-        f"+{len(added)} linje(r) tilfoejet, -{len(removed)} fjernet. "
-        f"Foerste tilfoejelser: {' | '.join(line[1:].strip() for line in added[:3])}"
+        f"+{len(added)} linje(r) tilføjet, -{len(removed)} fjernet. "
+        f"Første tilføjelser: {' | '.join(line[1:].strip() for line in added[:3])}"
     )
     return summary[:1000]
 
@@ -103,7 +103,7 @@ class WaybackScraper(Scraper):
                     event_type="web_baseline",
                     source=self.source,
                     title=f"Web-baseline: {url}",
-                    description=f"Foerste snapshot, {len(current_text)} tegn ren tekst.",
+                    description=f"Første snapshot, {len(current_text)} tegn ren tekst.",
                     url=url,
                     raw_data={"hash": current_hash, "text": current_text[:SNAPSHOT_MAX_BYTES]},
                     detected_at=now,
@@ -137,7 +137,7 @@ class WaybackScraper(Scraper):
                 competitor_id=competitor.id,  # type: ignore[arg-type]
                 event_type="web_change",
                 source=self.source,
-                title=f"Web-aendring: {url}",
+                title=f"Web-ændring: {url}",
                 description=summary,
                 url=url,
                 raw_data={

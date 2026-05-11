@@ -11,7 +11,7 @@ Per-konkurrent override via competitor.scraper_config['career_site']:
       "location_selector": ".location"               # selector for sted (valgfri)
     }
 
-Hvis ingen config: prover en raekke faelles fallback-selectors. Returnerer 0 hvis intet matcher
+Hvis ingen config: prover en række fælles fallback-selectors. Returnerer 0 hvis intet matcher
 (forventet for SPA-sider der renderer i JavaScript - alert-mekanik kommer i Sprint 02 trin 5).
 """
 
@@ -111,7 +111,7 @@ class CareerSiteScraper(Scraper):
         cards = _find_job_cards(soup, config.get("job_card_selector"))
 
         if not cards:
-            result.raw_warnings.append(f"ingen job-cards fundet paa {url} - SPA eller forkert selector?")
+            result.raw_warnings.append(f"ingen job-cards fundet på {url} - SPA eller forkert selector?")
             return result
 
         existing_external_ids = set(

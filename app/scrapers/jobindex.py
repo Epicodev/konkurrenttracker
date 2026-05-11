@@ -1,6 +1,6 @@
 """Jobindex RSS-scraper.
 
-Henter feed pr. konkurrent fra https://www.jobindex.dk/jobsoegning.rss?q=<query>
+Henter feed pr. konkurrent fra https://www.jobindex.dk/jobsøgning.rss?q=<query>
 og gemmer nye opslag som JobPosting-rows.
 """
 
@@ -17,7 +17,7 @@ from app.scrapers.base import ScrapeResult, Scraper, jobindex_query_for
 
 logger = structlog.get_logger(__name__)
 
-FEED_URL = "https://www.jobindex.dk/jobsoegning.rss?q={query}"
+FEED_URL = "https://www.jobindex.dk/jobsøgning.rss?q={query}"
 HTTP_TIMEOUT = 20.0
 
 
@@ -50,7 +50,7 @@ class JobindexScraper(Scraper):
         )
 
         now = datetime.utcnow()
-        # Jobindex returnerer "lignende jobs" som fallback naar ingen entries matcher query'en
+        # Jobindex returnerer "lignende jobs" som fallback når ingen entries matcher query'en
         # eksakt. Vi filtrerer post-fetch: query-termerne SKAL forekomme i title eller description.
         query_lower = query.lower()
         for entry in feed.entries:
