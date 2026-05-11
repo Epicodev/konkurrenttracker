@@ -17,6 +17,8 @@ from app.models import (
     FinancialReport,
     GeoMention,
     JobPosting,
+    MarketJobPosting,
+    MarketTrendSignal,
     Report,
     Signal,
 )
@@ -383,6 +385,185 @@ def finance_history(
         entry["equity"].append(r.equity)
         entry["employees"].append(r.average_employees)
     return {"series": list(by_competitor.values())}
+
+
+@router.get("/market/overview")
+def market_overview(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Overblik: totalt antal market-jobs, antal klassificerede, fordeling pr. kilde."""
+    total = session.exec(select(func.count()).select_from(MarketJobPosting)).one()
+    classified = session.exec(
+        select(func.count()).select_from(MarketJobPosting).where(
+            MarketJobPosting.classified_at.is_not(None)  # type: ignore[union-attr]
+        )
+    ).one()
+    last_30d = datetime.utcnow() - timedelta(days=30)
+    new_30d = session.exec(
+        select(func.count()).select_from(MarketJobPosting).where(
+            MarketJobPosting.first_seen_at >= last_30d
+        )
+    ).one()
+    emerging = session.exec(
+        select(func.count()).select_from(MarketJobPosting).where(
+            MarketJobPosting.is_emerging.is_(True),  # type: ignore[union-attr]
+            MarketJobPosting.first_seen_at >= last_30d,
+        )
+    ).one()
+    return {
+        "total_jobs": total,
+        "classified": classified,
+        "new_last_30d": new_30d,
+        "emerging_last_30d": emerging,
+    }
+
+
+@router.get("/market/specializations")
+def market_specializations(
+    session: Session = Depends(get_session),
+    weeks: int = Query(default=12, le=52),
+) -> dict[str, Any]:
+    """Time-series af specialiseringer pr. uge."""
+    cutoff = datetime.utcnow() - timedelta(weeks=weeks)
+    rows = list(
+        session.exec(
+            select(MarketJobPosting).where(
+                MarketJobPosting.first_seen_at >= cutoff,
+                MarketJobPosting.specialization.is_not(None),  # type: ignore[union-attr]
+            )
+        ).all()
+    )
+    series: dict[str, dict[str, int]] = {}
+    weeks_set: set[str] = set()
+    for j in rows:
+        iso_year, iso_week, _ = j.first_seen_at.isocalendar()
+        week = f"{iso_year}-W{iso_week:02d}"
+        weeks_set.add(week)
+        spec = j.specialization or "other"
+        series.setdefault(spec, {}).setdefault(week, 0)
+        series[spec][week] += 1
+    weeks_sorted = sorted(weeks_set)
+    return {
+        "weeks": weeks_sorted,
+        "series": [
+            {"name": name, "data": [series[name].get(w, 0) for w in weeks_sorted]}
+            for name in sorted(series, key=lambda n: -sum(series[n].values()))
+        ],
+    }
+
+
+@router.get("/market/top-skills")
+def market_top_skills(
+    session: Session = Depends(get_session),
+    days: int = Query(default=30, le=180),
+    limit: int = Query(default=20, le=100),
+) -> dict[str, Any]:
+    """Top teknologier i de seneste N dage + delta vs forrige N dage."""
+    now = datetime.utcnow()
+    current_start = now - timedelta(days=days)
+    prior_start = current_start - timedelta(days=days)
+
+    def _count_skills(start: datetime, end: datetime) -> dict[str, int]:
+        rows = list(
+            session.exec(
+                select(MarketJobPosting).where(
+                    MarketJobPosting.first_seen_at >= start,
+                    MarketJobPosting.first_seen_at < end,
+                    MarketJobPosting.classified_at.is_not(None),  # type: ignore[union-attr]
+                )
+            ).all()
+        )
+        counts: dict[str, int] = {}
+        for r in rows:
+            for tech in r.tech_stack or []:
+                t = str(tech)
+                counts[t] = counts.get(t, 0) + 1
+        return counts
+
+    current = _count_skills(current_start, now)
+    prior = _count_skills(prior_start, current_start)
+
+    skills = []
+    for tech, count in current.items():
+        prev = prior.get(tech, 0)
+        delta_pct = ((count - prev) / prev) if prev > 0 else (1.0 if count > 0 else 0.0)
+        skills.append({"tech": tech, "current": count, "prior": prev, "delta_pct": delta_pct})
+
+    # Sortér efter current count desc
+    skills.sort(key=lambda s: s["current"], reverse=True)
+    return {
+        "period_days": days,
+        "current_start": current_start.isoformat(),
+        "prior_start": prior_start.isoformat(),
+        "skills": skills[:limit],
+    }
+
+
+@router.get("/market/emerging")
+def market_emerging(
+    session: Session = Depends(get_session),
+    days: int = Query(default=60, le=180),
+    limit: int = Query(default=30, le=100),
+) -> list[dict[str, Any]]:
+    """Nye/sjældne rolletyper (is_emerging=true) i de seneste N dage."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = list(
+        session.exec(
+            select(MarketJobPosting)
+            .where(
+                MarketJobPosting.is_emerging.is_(True),  # type: ignore[union-attr]
+                MarketJobPosting.first_seen_at >= cutoff,
+            )
+            .order_by(MarketJobPosting.first_seen_at.desc())  # type: ignore[union-attr]
+            .limit(limit)
+        ).all()
+    )
+    return [
+        {
+            "title": r.title,
+            "company": r.company,
+            "specialization": r.specialization,
+            "tech_stack": r.tech_stack,
+            "url": r.url,
+            "first_seen_at": r.first_seen_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/market/trend-signals")
+def market_trend_signals(
+    session: Session = Depends(get_session),
+    week: str | None = None,
+    limit: int = Query(default=20, le=50),
+) -> list[dict[str, Any]]:
+    """Sonnet-genererede markedstrend-signaler. Default: seneste uge med data."""
+    target_week = week or session.exec(select(func.max(MarketTrendSignal.week))).one()
+    if not target_week:
+        return []
+    rows = list(
+        session.exec(
+            select(MarketTrendSignal)
+            .where(MarketTrendSignal.week == target_week)
+            .order_by(MarketTrendSignal.severity, MarketTrendSignal.created_at.desc())  # type: ignore[union-attr]
+            .limit(limit)
+        ).all()
+    )
+    return [
+        {
+            "week": r.week,
+            "signal_type": r.signal_type,
+            "specialization": r.specialization,
+            "tech": r.tech,
+            "severity": r.severity,
+            "title": r.title,
+            "summary": r.summary,
+            "delta_pct": r.delta_pct,
+            "sample_size": r.sample_size,
+            "recommended_action": r.recommended_action,
+            "confidence": r.confidence,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
 
 
 @router.get("/stats")

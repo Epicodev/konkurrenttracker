@@ -12,6 +12,8 @@ from sqlmodel import Session, func, select
 
 from app.analysis.classifier import classify_pending
 from app.analysis.geo_tracker import run_geo_pass
+from app.analysis.market_classifier import classify_pending as classify_market_pending
+from app.analysis.market_trends import analyze_market_trends
 from app.analysis.synthesizer import synthesize_week
 from app.auth import require_basic_auth
 from app.db import get_session
@@ -24,6 +26,7 @@ from app.scrapers.cvr import CvrScraper
 from app.scrapers.finance import FinanceScraper
 from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
+from app.scrapers.market_jobs import scrape_market_jobs
 from app.scrapers.wayback import WaybackScraper
 from app.scrapers.web_intel import WebIntelScraper
 
@@ -428,6 +431,27 @@ def trigger_synthesize(session: Session = Depends(get_session)) -> dict[str, Any
 def trigger_geo_pass(session: Session = Depends(get_session)) -> dict[str, Any]:
     """Manuel trigger - kør GEO share-of-voice måling mod Claude."""
     return run_geo_pass(session)
+
+
+@router.post("/scrape/market_jobs")
+def trigger_market_jobs_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - scrape ALLE IT-jobs i DK fra Jobindex + IT-Jobbank."""
+    return scrape_market_jobs(session)
+
+
+@router.post("/analyze/market_classify")
+def trigger_market_classify(
+    session: Session = Depends(get_session),
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Manuel trigger - klassificer alle pending market-jobs med Haiku."""
+    return classify_market_pending(session, limit=limit)
+
+
+@router.post("/analyze/market_trends")
+def trigger_market_trends(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - generér markedstrend-signaler med Sonnet."""
+    return analyze_market_trends(session)
 
 
 @router.post("/report/build")

@@ -16,6 +16,8 @@ from app.db import engine
 from app.notifications import slack_alert
 from app.analysis.classifier import classify_pending
 from app.analysis.geo_tracker import run_geo_pass
+from app.analysis.market_classifier import classify_pending as classify_market_pending
+from app.analysis.market_trends import analyze_market_trends
 from app.analysis.synthesizer import synthesize_week
 from app.jobs.deliver_weekly import deliver
 from app.models import Competitor, Signal
@@ -25,6 +27,7 @@ from app.scrapers.cvr import CvrScraper
 from app.scrapers.finance import FinanceScraper
 from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
+from app.scrapers.market_jobs import scrape_market_jobs
 from app.scrapers.wayback import WaybackScraper
 from app.scrapers.web_intel import WebIntelScraper
 
@@ -117,6 +120,34 @@ def _geo_job() -> None:
         slack_alert(f"⚠️ GEO-pass tilføjede 0 målinger. Reason: {result.get('reason', 'ukendt')}")
 
 
+def _market_scrape_job() -> None:
+    """Dagligt: scrape Jobindex IT + IT-Jobbank for nye markeds-jobs."""
+    logger.info("cron.market_scrape.start")
+    with Session(engine) as session:
+        result = scrape_market_jobs(session)
+    logger.info("cron.market_scrape.done", **result)
+
+
+def _market_classify_job() -> None:
+    """Dagligt efter scrape: klassificer pending market-jobs med Haiku."""
+    logger.info("cron.market_classify.start")
+    with Session(engine) as session:
+        result = classify_market_pending(session, limit=500)
+    logger.info("cron.market_classify.done", **result)
+
+
+def _market_trends_job() -> None:
+    """Ugentligt: kør Sonnet-trend-analyse på det aggregerede marked."""
+    logger.info("cron.market_trends.start")
+    with Session(engine) as session:
+        result = analyze_market_trends(session)
+    logger.info("cron.market_trends.done", **result)
+    if result.get("signals_added", 0) == 0:
+        slack_alert(
+            f"⚠️ Markedstrend-analyse gav 0 signaler. Reason: {result.get('reason', 'ukendt')}"
+        )
+
+
 def _deliver_job() -> None:
     logger.info("cron.deliver.start")
     result = deliver()
@@ -134,10 +165,13 @@ JOB_CONFIGS: list[tuple[str, str, callable, CronTrigger]] = [  # type: ignore[ty
     ("scrape_cvr", "Scrape CVR", lambda: _wrap(CvrScraper()), CronTrigger(hour=3, minute=0)),
     ("scrape_google_news", "Scrape Google News", lambda: _wrap(GoogleNewsScraper()), CronTrigger(hour=3, minute=30)),
     ("classify_pending", "Klassificer nye jobopslag (Haiku)", lambda: _classify_job, CronTrigger(hour=4, minute=0)),
+    ("scrape_market_jobs", "Scrape marked-bredt (Jobindex IT + IT-Jobbank)", lambda: _market_scrape_job, CronTrigger(hour=5, minute=0)),
+    ("classify_market_jobs", "Klassificer marked-jobs (Haiku)", lambda: _market_classify_job, CronTrigger(hour=5, minute=30)),
     ("scrape_wayback", "Scrape Wayback (web-snapshots)", lambda: _wrap(WaybackScraper()), CronTrigger(day_of_week="sun", hour=21, minute=0)),
     ("scrape_web_intel", "Scrape web-intel (tech stack + sitemap)", lambda: _wrap(WebIntelScraper()), CronTrigger(day_of_week="sun", hour=21, minute=20)),
     ("scrape_finance", "Scrape regnskaber (virk.dk distribution)", lambda: _wrap(FinanceScraper()), CronTrigger(day_of_week="sun", hour=21, minute=30)),
     ("geo_weekly", "GEO share-of-voice (Claude)", lambda: _geo_job, CronTrigger(day_of_week="sun", hour=21, minute=40)),
+    ("market_trends_weekly", "Markedstrends (Sonnet)", lambda: _market_trends_job, CronTrigger(day_of_week="sun", hour=21, minute=50)),
     ("synthesize_weekly", "Ugentlig syntese (Sonnet)", lambda: _synthesize_job, CronTrigger(day_of_week="sun", hour=22, minute=0)),
     ("deliver_weekly", "Send ugentlig PDF-rapport (Postmark)", lambda: _deliver_job, CronTrigger(day_of_week="mon", hour=7, minute=0)),
 ]

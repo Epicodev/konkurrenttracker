@@ -71,6 +71,23 @@
     .row-status.ok { color: #1a7a1a; }
     .row-status.err { color: #b41018; }
     .admin-active { display: flex; align-items: center; gap: 4px; }
+    .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .market-card { background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 16px; }
+    .market-card h3 { margin: 0 0 10px; font-size: 14px; }
+    .skill-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+    .skill-name { flex: 1; }
+    .skill-count { color: #666; min-width: 30px; text-align: right; }
+    .skill-delta { min-width: 70px; text-align: right; font-size: 12px; font-weight: 600; }
+    .skill-bar-wrap { width: 80px; background: #f1f1f1; border-radius: 3px; height: 6px; overflow: hidden; }
+    .skill-bar-fill { background: #d97a1a; height: 100%; }
+    .trend-signal { padding: 12px; border-left: 3px solid #d97a1a; margin-bottom: 10px; background: #fafafa; border-radius: 0 6px 6px 0; }
+    .trend-signal.urgent { border-color: #b41018; }
+    .trend-signal.opportunity { border-color: #1a7a1a; }
+    .trend-signal h4 { margin: 0 0 4px; font-size: 14px; }
+    .trend-signal .meta { font-size: 11px; color: #666; margin-bottom: 6px; }
+    .trend-signal .summary { font-size: 13px; color: #333; line-height: 1.5; }
+    .trend-signal .action { margin-top: 6px; font-size: 12px; color: #1a1a1a; font-style: italic; }
+    .badge-emerging { background: #d97a1a; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; text-transform: uppercase; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -92,6 +109,7 @@
         <tr><td>Web-snapshot</td><td>Forsiden hash'es og diff'es - ændringer på minimum 200 tegn registreres.</td></tr>
         <tr><td>Web-intel</td><td>Tech-stack (ATS, CMS, analytics, marketing-tools) + sitemap-velocity. Detekterer fx skift fra Workday til Greenhouse, eller pludselig vækst i blog-content.</td></tr>
         <tr><td>Regnskaber (virk.dk)</td><td>Officielle årsregnskaber via Erhvervsstyrelsens distribution-API. XBRL parses til omsætning, resultat, egenkapital, balancesum, ansatte. YoY, margin og soliditet beregnes.</td></tr>
+        <tr><td>Marked-bred IT-scan</td><td>ALLE nye IT-jobs i DK (Jobindex IT-branche + IT-Jobbank). Haiku beriger pr. job med specialisering + tech-stack + emerging-flag. Sonnet finder ugentligt 4-8 markedstrend-signaler (growth / decline / emerging / spike / shift). Prediktivt - vi ser trends FØR konkurrenter reagerer.</td></tr>
         <tr><td>GEO (AI-søgning)</td><td>10 realistiske brugerspørgsmål stilles til Claude. Vi måler "share of voice" - hvor ofte hver konkurrent bliver nævnt + sentiment.</td></tr>
       </table>
 
@@ -118,6 +136,7 @@
   <div style="margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
     <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Kør alle scrapere</button>
     <button id="btn-finance" style="padding: 8px 14px; background: #1a7a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent regnskaber</button>
+    <button id="btn-market" style="padding: 8px 14px; background: #d97a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Scan IT-markedet</button>
     <button id="btn-geo" style="padding: 8px 14px; background: #6a3fb5; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Mål AI-synlighed (GEO)</button>
     <button id="btn-synthesize" style="padding: 8px 14px; background: #b41018; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer signaler (Sonnet)</button>
     <button id="btn-report" style="padding: 8px 14px; background: #0066cc; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent rapport som PDF</button>
@@ -133,6 +152,7 @@
     <button class="tab" data-tab="geo">GEO (AI-synlighed)</button>
     <button class="tab" data-tab="jobs">Jobopslag</button>
     <button class="tab" data-tab="events">Firma-events</button>
+    <button class="tab" data-tab="market">Marked</button>
     <button class="tab" data-tab="reports">Rapporter</button>
     <button class="tab" data-tab="competitors">Konkurrenter</button>
   </div>
@@ -441,6 +461,125 @@
       });
     }
 
+    async function renderMarket() {
+      let overview, skills, emerging, signals, specs;
+      try {
+        [overview, skills, emerging, signals, specs] = await Promise.all([
+          fetchJSON("/api/market/overview"),
+          fetchJSON("/api/market/top-skills?days=30&limit=15"),
+          fetchJSON("/api/market/emerging?days=60&limit=20"),
+          fetchJSON("/api/market/trend-signals?limit=10"),
+          fetchJSON("/api/market/specializations?weeks=12"),
+        ]);
+      } catch (err) {
+        document.getElementById("content").innerHTML = `<div class="empty">Fejl: ${err.message}</div>`;
+        return;
+      }
+      if (overview.total_jobs === 0) {
+        document.getElementById("content").innerHTML = `<div class="empty">
+          Ingen marked-data endnu. Klik "Scan IT-markedet" øverst for at hente alle IT-jobs fra Jobindex + IT-Jobbank.<br><br>
+          Når data er hentet, klassificerer Haiku dem automatisk (~30 sek), og du kan derefter generere markedstrend-signaler med Sonnet.
+        </div>`;
+        return;
+      }
+
+      // Stats
+      const statsHtml = `
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+          <div class="stat"><div class="stat-value">${overview.total_jobs}</div><div class="stat-label">Markeds-jobs totalt</div></div>
+          <div class="stat"><div class="stat-value">${overview.new_last_30d}</div><div class="stat-label">Nye sidste 30 dage</div></div>
+          <div class="stat"><div class="stat-value">${overview.classified}</div><div class="stat-label">Klassificeret</div></div>
+          <div class="stat"><div class="stat-value">${overview.emerging_last_30d}</div><div class="stat-label">Nye/sjældne roller (30d)</div></div>
+        </div>
+      `;
+
+      // Trend-signaler (Sonnet)
+      let signalsHtml = "";
+      if (signals.length > 0) {
+        signalsHtml = `
+          <div class="chart-card">
+            <h3>Markedstrend-signaler (Sonnet)</h3>
+            <div class="chart-sub">${signals[0].week} · prediktive signaler genereret ud fra aggregerede jobdata</div>
+            ${signals.map(s => `
+              <div class="trend-signal ${s.severity}">
+                <h4>${escapeHtml(s.title)}</h4>
+                <div class="meta">
+                  <strong>${s.signal_type}</strong>
+                  ${s.specialization ? ` · ${escapeHtml(s.specialization)}` : ""}
+                  ${s.tech ? ` · ${escapeHtml(s.tech)}` : ""}
+                  ${s.delta_pct !== null ? ` · <strong>${s.delta_pct > 0 ? "+" : ""}${(s.delta_pct * 100).toFixed(0)}%</strong>` : ""}
+                  ${s.sample_size ? ` · n=${s.sample_size}` : ""}
+                  · ${s.confidence} tillid
+                </div>
+                <div class="summary">${escapeHtml(s.summary)}</div>
+                ${s.recommended_action ? `<div class="action">→ ${escapeHtml(s.recommended_action)}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        `;
+      } else {
+        signalsHtml = `<div class="chart-card"><h3>Markedstrend-signaler</h3><div class="empty" style="padding:20px">Ingen Sonnet-signaler endnu. Klassificer markedet først, klik så "Generer signaler (Sonnet)" eller vent til søndag aften.</div></div>`;
+      }
+
+      // Top skills
+      const maxSkill = Math.max(1, ...skills.skills.map(s => s.current));
+      const skillsHtml = `
+        <div class="market-card">
+          <h3>Top teknologier (sidste 30 dage)</h3>
+          ${skills.skills.length === 0 ? '<div class="empty">Ingen klassificerede jobs endnu.</div>' :
+            skills.skills.map(s => {
+              const delta = s.delta_pct;
+              const deltaCls = delta > 0.05 ? "delta-up" : delta < -0.05 ? "delta-down" : "delta-flat";
+              const deltaTxt = delta > 0 ? `+${(delta * 100).toFixed(0)}%` : `${(delta * 100).toFixed(0)}%`;
+              return `
+                <div class="skill-row">
+                  <div class="skill-name">${escapeHtml(s.tech)}</div>
+                  <div class="skill-bar-wrap"><div class="skill-bar-fill" style="width:${(s.current / maxSkill * 100).toFixed(0)}%"></div></div>
+                  <div class="skill-count">${s.current}</div>
+                  <div class="skill-delta ${deltaCls}">${deltaTxt}</div>
+                </div>
+              `;
+            }).join("")
+          }
+        </div>
+      `;
+
+      // Specialiseringer trend (chart)
+      const specsHtml = `
+        <div class="market-card">
+          <h3>Specialiseringer over tid</h3>
+          <div class="chart-wrap" style="height:260px"><canvas id="chart-market-specs"></canvas></div>
+        </div>
+      `;
+
+      // Emerging titles
+      const emergingHtml = `
+        <div class="chart-card">
+          <h3>Nye/sjældne rolletyper (sidste 60 dage)</h3>
+          <div class="chart-sub">Roller markeret som "emerging" af Haiku - typisk nye fagområder (FinOps, Platform Engineering, AI Safety osv.)</div>
+          ${emerging.length === 0 ? '<div class="empty">Ingen markeret som emerging endnu.</div>' : `
+            <table><thead><tr><th>Titel</th><th>Firma</th><th>Specialisering</th><th>Tech</th><th>Set</th></tr></thead><tbody>
+              ${emerging.map(e => `<tr>
+                <td><span class="badge-emerging">NY</span> ${e.url ? `<a href="${e.url}" target="_blank">${escapeHtml(e.title)}</a>` : escapeHtml(e.title)}</td>
+                <td>${escapeHtml(e.company || "-")}</td>
+                <td>${escapeHtml(e.specialization || "-")}</td>
+                <td><small>${(e.tech_stack || []).map(t => escapeHtml(t)).join(", ") || "-"}</small></td>
+                <td>${e.first_seen_at.slice(0, 10)}</td>
+              </tr>`).join("")}
+            </tbody></table>
+          `}
+        </div>
+      `;
+
+      document.getElementById("content").innerHTML = `
+        ${statsHtml}
+        ${signalsHtml}
+        <div class="market-grid">${skillsHtml}${specsHtml}</div>
+        ${emergingHtml}
+      `;
+      drawLineChart("chart-market-specs", specs);
+    }
+
     async function renderFinance() {
       let latest, history;
       try {
@@ -592,13 +731,14 @@
 
     async function refresh() {
       // Vis/skjul kompetitor-filteret afhængigt af tab
-      const noFilterTabs = new Set(["reports", "trends", "geo", "finance", "competitors"]);
+      const noFilterTabs = new Set(["reports", "trends", "geo", "finance", "competitors", "market"]);
       document.querySelector(".filters").style.display = noFilterTabs.has(state.tab) ? "none" : "flex";
 
       if (state.tab === "trends") return renderTrends();
       if (state.tab === "geo") return renderGeo();
       if (state.tab === "finance") return renderFinance();
       if (state.tab === "competitors") return renderCompetitors();
+      if (state.tab === "market") return renderMarket();
 
       const params = state.competitor ? `?competitor=${encodeURIComponent(state.competitor)}` : "";
       const path = { signals: "/api/signals", jobs: "/api/jobs", events: "/api/events", reports: "/admin/reports" }[state.tab];
@@ -623,6 +763,12 @@
       }
       if (data.competitors_tracked !== undefined) {
         return `${label}: ${data.competitors_tracked} konkurrenter målt over ${data.runs} prompts (uge ${data.week || "-"})${data.reason ? ` - ${data.reason}` : ""}`;
+      }
+      if (data.total_added !== undefined && data.jobindex_it !== undefined) {
+        return `${label}: ${data.total_added} nye markeds-jobs (jobindex=${data.jobindex_it.added}, it_jobbank=${data.it_jobbank.added})`;
+      }
+      if (data.processed !== undefined && data.updated !== undefined) {
+        return `${label}: ${data.updated}/${data.processed} jobs klassificeret${data.reason ? ` - ${data.reason}` : ""}`;
       }
       if (data.pdf_size_kb !== undefined) {
         const mailInfo = data.mail.skipped ? `(mail skipped: ${data.mail.reason})` : `(mail sendt til ${data.mail.sent})`;
@@ -669,6 +815,11 @@
         sel.addEventListener("change", e => { state.competitor = e.target.value; refresh(); });
         document.getElementById("btn-scrape").addEventListener("click", () => triggerAction("Scrape", "/admin/scrape/all"));
         document.getElementById("btn-finance").addEventListener("click", () => triggerAction("Regnskaber", "/admin/scrape/finance"));
+        document.getElementById("btn-market").addEventListener("click", async () => {
+          // Scan markedet + klassificer i én knap (kører sekventielt)
+          await triggerAction("Scan marked", "/admin/scrape/market_jobs");
+          await triggerAction("Klassificer marked (Haiku)", "/admin/analyze/market_classify");
+        });
         document.getElementById("btn-geo").addEventListener("click", () => triggerAction("GEO-pass", "/admin/analyze/geo"));
         document.getElementById("btn-synthesize").addEventListener("click", () => triggerAction("Syntese", "/admin/analyze/synthesize"));
         document.getElementById("btn-report").addEventListener("click", () => {
