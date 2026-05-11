@@ -11,7 +11,15 @@ from sqlmodel import Session, func, select
 
 from app.auth import require_basic_auth
 from app.db import get_session
-from app.models import CompanyEvent, Competitor, GeoMention, JobPosting, Report, Signal
+from app.models import (
+    CompanyEvent,
+    Competitor,
+    FinancialReport,
+    GeoMention,
+    JobPosting,
+    Report,
+    Signal,
+)
 
 router = APIRouter(prefix="/api", tags=["public"], dependencies=[Depends(require_basic_auth)])
 
@@ -277,6 +285,104 @@ def geo_trends(
             for name in sorted(by_week)
         ],
     }
+
+
+def _finance_row(report: FinancialReport, competitor: Competitor) -> dict[str, Any]:
+    return {
+        "competitor": {"slug": competitor.slug, "name": competitor.name},
+        "fiscal_year_start": report.fiscal_year_start.isoformat() if report.fiscal_year_start else None,
+        "fiscal_year_end": report.fiscal_year_end.isoformat(),
+        "fiscal_year": report.fiscal_year_end.year,
+        "revenue": report.revenue,
+        "gross_profit": report.gross_profit,
+        "profit_loss": report.profit_loss,
+        "employee_expenses": report.employee_expenses,
+        "equity": report.equity,
+        "assets": report.assets,
+        "average_employees": report.average_employees,
+        "profit_margin": (
+            report.profit_loss / report.revenue
+            if report.profit_loss is not None and report.revenue and report.revenue > 0
+            else None
+        ),
+        "equity_ratio": (
+            report.equity / report.assets
+            if report.equity is not None and report.assets and report.assets > 0
+            else None
+        ),
+        "revenue_per_employee": (
+            report.revenue / report.average_employees
+            if report.revenue is not None and report.average_employees
+            else None
+        ),
+        "pdf_url": report.pdf_url,
+        "xbrl_url": report.xbrl_url,
+        "published_at": report.published_at.isoformat() if report.published_at else None,
+    }
+
+
+@router.get("/finance/latest")
+def finance_latest(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    """Seneste regnskab pr. konkurrent + YoY-vaekst hvis aaret foer er tilgaengeligt."""
+    rows = list(
+        session.exec(
+            select(FinancialReport, Competitor)
+            .join(Competitor, FinancialReport.competitor_id == Competitor.id)
+            .order_by(Competitor.name, FinancialReport.fiscal_year_end.desc())  # type: ignore[union-attr]
+        ).all()
+    )
+    by_competitor: dict[int, list[tuple[FinancialReport, Competitor]]] = {}
+    for r, c in rows:
+        by_competitor.setdefault(c.id, []).append((r, c))
+
+    out: list[dict[str, Any]] = []
+    for _, reports in by_competitor.items():
+        if not reports:
+            continue
+        latest, competitor = reports[0]
+        prior = reports[1][0] if len(reports) > 1 else None
+        data = _finance_row(latest, competitor)
+        # YoY-vaekst hvis baade nuvaerende OG forrige har omsaetning
+        if prior and latest.revenue and prior.revenue:
+            data["revenue_yoy"] = (latest.revenue - prior.revenue) / prior.revenue
+        else:
+            data["revenue_yoy"] = None
+        if prior and latest.profit_loss is not None and prior.profit_loss is not None:
+            data["profit_delta"] = latest.profit_loss - prior.profit_loss
+        else:
+            data["profit_delta"] = None
+        data["report_count"] = len(reports)
+        out.append(data)
+    out.sort(key=lambda d: d["revenue"] or 0, reverse=True)
+    return out
+
+
+@router.get("/finance/history")
+def finance_history(
+    session: Session = Depends(get_session),
+    competitor: str | None = None,
+) -> dict[str, Any]:
+    """Tidsserier af KPIs pr. konkurrent for graf-rendering."""
+    query = (
+        select(FinancialReport, Competitor)
+        .join(Competitor, FinancialReport.competitor_id == Competitor.id)
+        .order_by(FinancialReport.fiscal_year_end)  # type: ignore[union-attr]
+    )
+    if competitor:
+        query = query.where(Competitor.slug == competitor)
+    rows = list(session.exec(query).all())
+
+    by_competitor: dict[str, dict[str, Any]] = {}
+    for r, c in rows:
+        entry = by_competitor.setdefault(
+            c.name, {"competitor": {"slug": c.slug, "name": c.name}, "years": [], "revenue": [], "profit_loss": [], "equity": [], "employees": []}
+        )
+        entry["years"].append(r.fiscal_year_end.year)
+        entry["revenue"].append(r.revenue)
+        entry["profit_loss"].append(r.profit_loss)
+        entry["equity"].append(r.equity)
+        entry["employees"].append(r.average_employees)
+    return {"series": list(by_competitor.values())}
 
 
 @router.get("/stats")

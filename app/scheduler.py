@@ -22,6 +22,7 @@ from app.models import Competitor, Signal
 from app.scrapers.base import Scraper, ScrapeResult
 from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
+from app.scrapers.finance import FinanceScraper
 from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
 from app.scrapers.wayback import WaybackScraper
@@ -135,6 +136,7 @@ JOB_CONFIGS: list[tuple[str, str, callable, CronTrigger]] = [  # type: ignore[ty
     ("classify_pending", "Klassificer nye jobopslag (Haiku)", lambda: _classify_job, CronTrigger(hour=4, minute=0)),
     ("scrape_wayback", "Scrape Wayback (web-snapshots)", lambda: _wrap(WaybackScraper()), CronTrigger(day_of_week="sun", hour=21, minute=0)),
     ("scrape_web_intel", "Scrape web-intel (tech stack + sitemap)", lambda: _wrap(WebIntelScraper()), CronTrigger(day_of_week="sun", hour=21, minute=20)),
+    ("scrape_finance", "Scrape regnskaber (virk.dk distribution)", lambda: _wrap(FinanceScraper()), CronTrigger(day_of_week="sun", hour=21, minute=30)),
     ("geo_weekly", "GEO share-of-voice (Claude)", lambda: _geo_job, CronTrigger(day_of_week="sun", hour=21, minute=40)),
     ("synthesize_weekly", "Ugentlig syntese (Sonnet)", lambda: _synthesize_job, CronTrigger(day_of_week="sun", hour=22, minute=0)),
     ("deliver_weekly", "Send ugentlig PDF-rapport (Postmark)", lambda: _deliver_job, CronTrigger(day_of_week="mon", hour=7, minute=0)),

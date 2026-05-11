@@ -20,6 +20,7 @@ from app.reporting.builder import build_payload
 from app.reporting.pdf import render_html
 from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
+from app.scrapers.finance import FinanceScraper
 from app.scrapers.google_news import GoogleNewsScraper
 from app.scrapers.jobindex import JobindexScraper
 from app.scrapers.wayback import WaybackScraper
@@ -199,9 +200,15 @@ def trigger_web_intel_scrape(session: Session = Depends(get_session)) -> dict[st
     return _run_scraper(WebIntelScraper(), "web_intel", session)
 
 
+@router.post("/scrape/finance")
+def trigger_finance_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - regnskaber fra virk.dk distribution-API."""
+    return _run_scraper(FinanceScraper(), "finance", session)
+
+
 @router.post("/scrape/all")
 def trigger_all_scrapers(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - koerer alle 6 scrapere sekventielt. Bruges til ad-hoc rapport-trigger."""
+    """Manuel trigger - koerer alle 7 scrapere sekventielt. Bruges til ad-hoc rapport-trigger."""
     return {
         "jobindex": _run_scraper(JobindexScraper(), "jobindex", session),
         "cvr": _run_scraper(CvrScraper(), "cvr", session),
@@ -209,6 +216,7 @@ def trigger_all_scrapers(session: Session = Depends(get_session)) -> dict[str, A
         "career_sites": _run_scraper(CareerSiteScraper(), "career_page", session),
         "wayback": _run_scraper(WaybackScraper(), "wayback", session),
         "web_intel": _run_scraper(WebIntelScraper(), "web_intel", session),
+        "finance": _run_scraper(FinanceScraper(), "finance", session),
     }
 
 

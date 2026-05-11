@@ -55,6 +55,13 @@
     .sentiment-mixed { background: #fff4e5; color: #b46010; }
     details.geo-quotes summary { cursor: pointer; font-size: 12px; color: #0066cc; }
     details.geo-quotes blockquote { margin: 8px 0 0 0; padding-left: 10px; border-left: 2px solid #ddd; color: #555; font-size: 12px; font-style: italic; }
+    .delta-up { color: #1a7a1a; font-weight: 600; }
+    .delta-down { color: #b41018; font-weight: 600; }
+    .delta-flat { color: #888; }
+    .sparkline { display: inline-block; vertical-align: middle; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .finance-table th, .finance-table td { padding: 6px 10px; font-size: 13px; }
+    .finance-table tr:hover { background: #fafafa; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -75,6 +82,7 @@
         <tr><td>Google News</td><td>Danske nyhedsartikler om konkurrenten.</td></tr>
         <tr><td>Web-snapshot</td><td>Forsiden hash'es og diff'es - aendringer paa minimum 200 tegn registreres.</td></tr>
         <tr><td>Web-intel</td><td>Tech-stack (ATS, CMS, analytics, marketing-tools) + sitemap-velocity. Detekterer fx skift fra Workday til Greenhouse, eller pludselig vaekst i blog-content.</td></tr>
+        <tr><td>Regnskaber (virk.dk)</td><td>Officielle aarsregnskaber via Erhvervsstyrelsens distribution-API. XBRL parses til omsaetning, resultat, egenkapital, balancesum, ansatte. YoY, margin og soliditet beregnes.</td></tr>
         <tr><td>GEO (AI-soegning)</td><td>10 realistiske brugerspoergsmaal stilles til Claude. Vi maaler "share of voice" - hvor ofte hver konkurrent bliver naevnt + sentiment.</td></tr>
       </table>
 
@@ -100,6 +108,7 @@
 
   <div style="margin-bottom: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
     <button id="btn-scrape" style="padding: 8px 14px; background: #1a1a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Koer alle scrapere</button>
+    <button id="btn-finance" style="padding: 8px 14px; background: #1a7a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent regnskaber</button>
     <button id="btn-geo" style="padding: 8px 14px; background: #6a3fb5; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Maal AI-synlighed (GEO)</button>
     <button id="btn-synthesize" style="padding: 8px 14px; background: #b41018; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer signaler (Sonnet)</button>
     <button id="btn-report" style="padding: 8px 14px; background: #0066cc; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent rapport som PDF</button>
@@ -110,6 +119,7 @@
 
   <div class="tabs">
     <button class="tab active" data-tab="signals">Signaler</button>
+    <button class="tab" data-tab="finance">Oekonomi</button>
     <button class="tab" data-tab="trends">Trends</button>
     <button class="tab" data-tab="geo">GEO (AI-synlighed)</button>
     <button class="tab" data-tab="jobs">Jobopslag</button>
@@ -270,6 +280,120 @@
       });
     }
 
+    function fmtDKK(value) {
+      if (value === null || value === undefined) return "<span style=\"color:#aaa\">-</span>";
+      const abs = Math.abs(value);
+      if (abs >= 1e9) return (value / 1e9).toFixed(2) + " mia";
+      if (abs >= 1e6) return (value / 1e6).toFixed(1) + " mio";
+      if (abs >= 1e3) return (value / 1e3).toFixed(0) + " tkr";
+      return value.toFixed(0);
+    }
+
+    function fmtPct(value) {
+      if (value === null || value === undefined) return "<span style=\"color:#aaa\">-</span>";
+      const cls = value > 0.005 ? "delta-up" : value < -0.005 ? "delta-down" : "delta-flat";
+      const arrow = value > 0.005 ? "▲" : value < -0.005 ? "▼" : "—";
+      return `<span class="${cls}">${arrow} ${(value * 100).toFixed(1)}%</span>`;
+    }
+
+    function sparklineSVG(values, color = "#1a1a1a") {
+      const nums = (values || []).map(v => v == null ? null : Number(v));
+      const valid = nums.filter(v => v !== null && !isNaN(v));
+      if (valid.length < 2) return "";
+      const w = 90, h = 22, pad = 2;
+      const min = Math.min(...valid), max = Math.max(...valid);
+      const range = max - min || 1;
+      // Map alle non-null til polyline; null laver et "gap"
+      const points = nums.map((v, i) => {
+        if (v == null || isNaN(v)) return null;
+        const x = pad + (i / (nums.length - 1)) * (w - 2 * pad);
+        const y = h - pad - ((v - min) / range) * (h - 2 * pad);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+      // Splid i segmenter ved nulls
+      const segments = [];
+      let cur = [];
+      points.forEach(p => {
+        if (p) cur.push(p);
+        else if (cur.length) { segments.push(cur.join(" ")); cur = []; }
+      });
+      if (cur.length) segments.push(cur.join(" "));
+      const polylines = segments.map(s => `<polyline points="${s}" fill="none" stroke="${color}" stroke-width="1.5"/>`).join("");
+      return `<svg class="sparkline" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${polylines}</svg>`;
+    }
+
+    async function renderFinance() {
+      let latest, history;
+      try {
+        [latest, history] = await Promise.all([
+          fetchJSON("/api/finance/latest"),
+          fetchJSON("/api/finance/history"),
+        ]);
+      } catch (err) {
+        document.getElementById("content").innerHTML = `<div class="empty">Fejl: ${err.message}</div>`;
+        return;
+      }
+      if (!latest.length) {
+        document.getElementById("content").innerHTML = `<div class="empty">
+          Ingen regnskaber hentet endnu. Klik "Hent regnskaber" oeverst for at koere foerste pass mod virk.dk.
+        </div>`;
+        return;
+      }
+      // Lookup history pr. konkurrent (slug)
+      const histBySlug = {};
+      history.series.forEach(h => { histBySlug[h.competitor.slug] = h; });
+
+      document.getElementById("content").innerHTML = `
+        <div style="margin-bottom:12px;color:#666;font-size:13px;">
+          Officielle regnskaber hentet fra <code>distribution.virk.dk</code>. Alle tal i DKK.
+          ${latest[0].fiscal_year ? `Seneste regnskabsaar varierer pr. konkurrent.` : ""}
+        </div>
+        <table class="finance-table">
+          <thead><tr>
+            <th>Konkurrent</th>
+            <th>Regnskabsaar</th>
+            <th class="num">Omsaetning</th>
+            <th class="num">YoY</th>
+            <th class="num">Aarets resultat</th>
+            <th class="num">Margin</th>
+            <th class="num">Egenkapital</th>
+            <th class="num">Soliditet</th>
+            <th class="num">Ansatte</th>
+            <th class="num">Omsaet./FTE</th>
+            <th>Trend (omsaet/resultat)</th>
+            <th>PDF</th>
+          </tr></thead>
+          <tbody>
+            ${latest.map(r => {
+              const h = histBySlug[r.competitor.slug] || {revenue: [], profit_loss: []};
+              return `<tr>
+                <td><strong>${r.competitor.name}</strong></td>
+                <td>${r.fiscal_year}</td>
+                <td class="num">${fmtDKK(r.revenue)}</td>
+                <td class="num">${fmtPct(r.revenue_yoy)}</td>
+                <td class="num">${fmtDKK(r.profit_loss)}</td>
+                <td class="num">${fmtPct(r.profit_margin)}</td>
+                <td class="num">${fmtDKK(r.equity)}</td>
+                <td class="num">${fmtPct(r.equity_ratio)}</td>
+                <td class="num">${r.average_employees ?? "<span style=\"color:#aaa\">-</span>"}</td>
+                <td class="num">${fmtDKK(r.revenue_per_employee)}</td>
+                <td>
+                  ${sparklineSVG(h.revenue, "#0066cc")}
+                  ${sparklineSVG(h.profit_loss, "#b41018")}
+                </td>
+                <td>${r.pdf_url ? `<a href="${r.pdf_url}" target="_blank">📄</a>` : (r.xbrl_url ? `<a href="${r.xbrl_url}" target="_blank">XBRL</a>` : "-")}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+        <p style="margin-top:14px;font-size:12px;color:#888;">
+          <strong>Bemaerk:</strong> Mindre selskaber (Klasse B) maa lovligt undlade at rapportere omsaetning - de viser kun bruttoresultat.
+          YoY og margin udregnes derfor kun hvor omsaetningstal findes for begge aar.
+          Soliditet = egenkapital / balancesum. Bla streg = omsaetning. Roed streg = resultat.
+        </p>
+      `;
+    }
+
     async function renderGeo() {
       let data;
       try {
@@ -349,11 +473,12 @@
 
     async function refresh() {
       // Vis/skjul kompetitor-filteret afhaengigt af tab
-      const noFilterTabs = new Set(["reports", "trends", "geo"]);
+      const noFilterTabs = new Set(["reports", "trends", "geo", "finance"]);
       document.querySelector(".filters").style.display = noFilterTabs.has(state.tab) ? "none" : "flex";
 
       if (state.tab === "trends") return renderTrends();
       if (state.tab === "geo") return renderGeo();
+      if (state.tab === "finance") return renderFinance();
 
       const params = state.competitor ? `?competitor=${encodeURIComponent(state.competitor)}` : "";
       const path = { signals: "/api/signals", jobs: "/api/jobs", events: "/api/events", reports: "/admin/reports" }[state.tab];
@@ -423,6 +548,7 @@
         competitors.forEach(c => sel.innerHTML += `<option value="${c.slug}">${c.name}</option>`);
         sel.addEventListener("change", e => { state.competitor = e.target.value; refresh(); });
         document.getElementById("btn-scrape").addEventListener("click", () => triggerAction("Scrape", "/admin/scrape/all"));
+        document.getElementById("btn-finance").addEventListener("click", () => triggerAction("Regnskaber", "/admin/scrape/finance"));
         document.getElementById("btn-geo").addEventListener("click", () => triggerAction("GEO-pass", "/admin/analyze/geo"));
         document.getElementById("btn-synthesize").addEventListener("click", () => triggerAction("Syntese", "/admin/analyze/synthesize"));
         document.getElementById("btn-report").addEventListener("click", () => {
