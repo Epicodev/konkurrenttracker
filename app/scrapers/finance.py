@@ -69,6 +69,18 @@ def _pick_xbrl_url(publication: dict[str, Any]) -> str | None:
     return None
 
 
+def _all_xbrl_urls(publication: dict[str, Any]) -> list[str]:
+    """Returner ALLE XBRL-URLs - en publikation kan have flere XML-filer
+    (fx koncernregnskab + parent-only). Vi parser dem alle og fletter resultater."""
+    urls: list[str] = []
+    for doc in publication.get("dokumenter", []) or []:
+        mime = (doc.get("dokumentMimeType") or "").lower()
+        url = doc.get("dokumentUrl")
+        if mime in ("application/xml", "text/xml") and url:
+            urls.append(url)
+    return urls
+
+
 def _pick_pdf_url(publication: dict[str, Any]) -> str | None:
     for doc in publication.get("dokumenter", []) or []:
         if (doc.get("dokumentMimeType") or "").lower() == "application/pdf":
@@ -93,8 +105,14 @@ def _period_dates(publication: dict[str, Any]) -> tuple[date | None, date | None
     return to_date(start), to_date(end)
 
 
-def _local(tag: str) -> str:
-    """Strip namespace fra XML-tag - '{ns}Name' -> 'Name'."""
+def _local(tag: Any) -> str:
+    """Strip namespace fra XML-tag - '{ns}Name' -> 'Name'.
+
+    lxml giver Comment/PI-elementer en non-string tag (Cython callable).
+    Vi returnerer tom streng for dem så iteration kan ignorere dem trygt.
+    """
+    if not isinstance(tag, str):
+        return ""
     return tag.split("}", 1)[1] if "}" in tag else tag
 
 
@@ -199,37 +217,38 @@ class FinanceScraper(Scraper):
             return result
 
         result.items_seen = len(publications)
-        existing_ends = set(
-            session.exec(
-                select(FinancialReport.fiscal_year_end).where(
-                    FinancialReport.competitor_id == competitor.id
-                )
+        existing_rows: dict[date, FinancialReport] = {
+            r.fiscal_year_end: r
+            for r in session.exec(
+                select(FinancialReport).where(FinancialReport.competitor_id == competitor.id)
             ).all()
-        )
+        }
 
         for pub in publications:
             fiscal_start, fiscal_end = _period_dates(pub)
             if fiscal_end is None:
                 continue
-            if fiscal_end in existing_ends:
-                # Allerede gemt - spring over (idempotent)
-                continue
 
-            xbrl_url = _pick_xbrl_url(pub)
+            xbrl_urls = _all_xbrl_urls(pub)
             pdf_url = _pick_pdf_url(pub)
+            # Parse ALLE XBRL-filer i publikationen og flet noegletallene.
+            # En publikation kan have baade parent-only og koncernregnskab; koncern har de
+            # fyldigste tal mens parent-only ofte kun har antal ansatte.
             kpis: dict[str, float | None] = {key: None for key in KPI_ELEMENTS}
-
-            if xbrl_url:
+            used_xbrl_url: str | None = None
+            for url in xbrl_urls:
                 try:
-                    xbrl_response = httpx.get(
-                        xbrl_url,
-                        headers={"User-Agent": USER_AGENT},
-                        timeout=HTTP_TIMEOUT,
-                    )
-                    xbrl_response.raise_for_status()
-                    kpis = _parse_xbrl(xbrl_response.content, fiscal_start, fiscal_end)
+                    resp = httpx.get(url, headers={"User-Agent": USER_AGENT}, timeout=HTTP_TIMEOUT)
+                    resp.raise_for_status()
                 except httpx.HTTPError as exc:
-                    logger.warning("finance.xbrl_fetch_failed", url=xbrl_url, error=str(exc))
+                    logger.warning("finance.xbrl_fetch_failed", url=url, error=str(exc))
+                    continue
+                parsed = _parse_xbrl(resp.content, fiscal_start, fiscal_end)
+                # Flet ind: kun udfyld felter der mangler
+                for key, value in parsed.items():
+                    if kpis.get(key) is None and value is not None:
+                        kpis[key] = value
+                        used_xbrl_url = url
 
             published_at = None
             published_raw = pub.get("offentliggoerelsesTidspunkt")
@@ -241,6 +260,35 @@ class FinanceScraper(Scraper):
 
             avg_emp = kpis.get("average_employees")
             avg_emp_int = int(avg_emp) if isinstance(avg_emp, (int, float)) else None
+
+            existing = existing_rows.get(fiscal_end)
+            if existing is not None:
+                # Backfill: udfyld kun felter der mangler, overskriv aldrig faktiske vaerdier.
+                # Bruges naar vi har en sparse row fra tidligere koersel og parser nu finder fyldigere data.
+                changed = False
+                for field, value in (
+                    ("revenue", kpis.get("revenue")),
+                    ("gross_profit", kpis.get("gross_profit")),
+                    ("profit_loss", kpis.get("profit_loss")),
+                    ("employee_expenses", kpis.get("employee_expenses")),
+                    ("equity", kpis.get("equity")),
+                    ("assets", kpis.get("assets")),
+                    ("average_employees", avg_emp_int),
+                ):
+                    if getattr(existing, field) is None and value is not None:
+                        setattr(existing, field, value)
+                        changed = True
+                if not existing.pdf_url and pdf_url:
+                    existing.pdf_url = pdf_url; changed = True
+                if not existing.xbrl_url and used_xbrl_url:
+                    existing.xbrl_url = used_xbrl_url; changed = True
+                if not existing.fiscal_year_start and fiscal_start:
+                    existing.fiscal_year_start = fiscal_start; changed = True
+                if changed:
+                    session.add(existing)
+                    result.items_added += 1
+                # Ingen ny CompanyEvent ved backfill - kun ved foerste-gangs indsaettelse
+                continue
 
             report = FinancialReport(
                 competitor_id=competitor.id,  # type: ignore[arg-type]
@@ -254,11 +302,11 @@ class FinanceScraper(Scraper):
                 assets=kpis.get("assets"),
                 average_employees=avg_emp_int,
                 pdf_url=pdf_url,
-                xbrl_url=xbrl_url,
+                xbrl_url=used_xbrl_url,
                 published_at=published_at,
             )
             session.add(report)
-            existing_ends.add(fiscal_end)
+            existing_rows[fiscal_end] = report
 
             # Lav en human-readable opsummering til CompanyEvent
             def _fmt_dkk(value: float | None) -> str:
