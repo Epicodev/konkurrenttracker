@@ -373,7 +373,10 @@
             CVR er nødvendigt for at hente regnskaber. Domæne er nødvendigt for web-intel og web-snapshot.
             Klik "Gem" på en række for at gemme ændringer.
           </div>
-          <button id="btn-fill-defaults" style="padding:6px 12px;background:#0066cc;color:white;border:0;border-radius:4px;font-size:12px;cursor:pointer;white-space:nowrap;">Fyld defaults ind</button>
+          <div style="display:flex;gap:6px;">
+            <button id="btn-seed-large" style="padding:6px 12px;background:#1a7a1a;color:white;border:0;border-radius:4px;font-size:12px;cursor:pointer;white-space:nowrap;">+ Tilføj store IT-konsulenthuse</button>
+            <button id="btn-fill-defaults" style="padding:6px 12px;background:#0066cc;color:white;border:0;border-radius:4px;font-size:12px;cursor:pointer;white-space:nowrap;">Fyld defaults ind</button>
+          </div>
         </div>
         <table class="admin-table">
           <thead><tr>
@@ -424,6 +427,26 @@
           } catch (err) {
             fillBtn.textContent = "✗ " + err.message;
             fillBtn.disabled = false;
+          }
+        });
+      }
+
+      // "Tilføj store IT-konsulenthuse" - bulk-insert af 13 store DK-firmaer
+      const seedBtn = document.getElementById("btn-seed-large");
+      if (seedBtn) {
+        seedBtn.addEventListener("click", async () => {
+          seedBtn.disabled = true;
+          seedBtn.textContent = "Tilføjer...";
+          try {
+            const res = await fetch("/admin/competitors/seed-large-firms", {method: "POST"});
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const skipped = data.skipped_existing.length;
+            seedBtn.textContent = `✓ ${data.count_added} tilføjet${skipped ? ` (${skipped} fandtes)` : ""}`;
+            setTimeout(() => renderCompetitors(), 1500);
+          } catch (err) {
+            seedBtn.textContent = "✗ " + err.message;
+            seedBtn.disabled = false;
           }
         });
       }

@@ -70,6 +70,176 @@ def admin_list_competitors(session: Session = Depends(get_session)) -> list[dict
     return [_competitor_to_dict(c) for c in rows]
 
 
+# Store DK IT-konsulenthuse - bulk-seed via /admin/competitors/seed-large-firms.
+# CVR'er slået op via web research (proff.dk + cvrapi.dk).
+LARGE_FIRMS: list[dict[str, Any]] = [
+    {
+        "slug": "twoday",
+        "name": "twoday Danmark A/S",
+        "cvr": "29973334",
+        "domain": "twoday.dk",
+        "scraper_config": {
+            "jobindex": {"query": "twoday"},
+            "google_news": {"query": "twoday Danmark"},
+            "geo": {"aliases": ["twoday", "Twoday", "twoday Danmark", "Visma Consulting"]},
+        },
+    },
+    {
+        "slug": "capgemini",
+        "name": "Capgemini Danmark A/S",
+        "cvr": "25606965",
+        "domain": "capgemini.com",
+        "scraper_config": {
+            "jobindex": {"query": "Capgemini"},
+            "google_news": {"query": "Capgemini Danmark"},
+            "geo": {"aliases": ["Capgemini", "Capgemini Danmark"]},
+        },
+    },
+    {
+        "slug": "netcompany",
+        "name": "Netcompany A/S",
+        "cvr": "14814833",
+        "domain": "netcompany.com",
+        "scraper_config": {
+            "jobindex": {"query": "Netcompany"},
+            "google_news": {"query": "Netcompany"},
+            "geo": {"aliases": ["Netcompany", "Netcompany Group"]},
+        },
+    },
+    {
+        "slug": "nnit",
+        "name": "NNIT A/S",
+        "cvr": "21093106",
+        "domain": "nnit.com",
+        "scraper_config": {
+            "jobindex": {"query": "NNIT"},
+            "google_news": {"query": "NNIT"},
+            "geo": {"aliases": ["NNIT", "NNIT A/S"]},
+        },
+    },
+    {
+        "slug": "kmd",
+        "name": "KMD A/S",
+        "cvr": "26911745",
+        "domain": "kmd.dk",
+        "scraper_config": {
+            "jobindex": {"query": "KMD"},
+            "google_news": {"query": "KMD A/S"},
+            "geo": {"aliases": ["KMD", "KMD A/S"]},
+        },
+    },
+    {
+        "slug": "trifork",
+        "name": "Trifork A/S",
+        "cvr": "20921897",
+        "domain": "trifork.com",
+        "scraper_config": {
+            "jobindex": {"query": "Trifork"},
+            "google_news": {"query": "Trifork"},
+            "geo": {"aliases": ["Trifork", "Trifork A/S"]},
+        },
+    },
+    {
+        "slug": "it-relation",
+        "name": "IT Relation A/S (itm8)",
+        "cvr": "27001092",
+        "domain": "itrelation.dk",
+        "scraper_config": {
+            "jobindex": {"query": "IT Relation"},
+            "google_news": {"query": "IT Relation OR itm8"},
+            "geo": {"aliases": ["IT Relation", "itm8", "IT Relation A/S"]},
+        },
+    },
+    {
+        "slug": "cgi",
+        "name": "CGI Danmark A/S",
+        "cvr": "63890812",
+        "domain": "cgi.com",
+        "scraper_config": {
+            "jobindex": {"query": "CGI"},
+            "google_news": {"query": "CGI Danmark"},
+            "geo": {"aliases": ["CGI", "CGI Danmark"]},
+        },
+    },
+    {
+        "slug": "atea",
+        "name": "Atea A/S",
+        "cvr": "25511484",
+        "domain": "atea.dk",
+        "scraper_config": {
+            "jobindex": {"query": "Atea"},
+            "google_news": {"query": "Atea"},
+            "geo": {"aliases": ["Atea", "Atea A/S"]},
+        },
+    },
+    {
+        "slug": "accenture",
+        "name": "Accenture A/S",
+        "cvr": "13227500",
+        "domain": "accenture.com",
+        "scraper_config": {
+            "jobindex": {"query": "Accenture"},
+            "google_news": {"query": "Accenture Danmark"},
+            "geo": {"aliases": ["Accenture", "Accenture A/S"]},
+        },
+    },
+    {
+        "slug": "deloitte",
+        "name": "Deloitte Statsautoriseret Revisionspartnerselskab",
+        "cvr": "33963556",
+        "domain": "deloitte.com",
+        "scraper_config": {
+            "jobindex": {"query": "Deloitte"},
+            "google_news": {"query": "Deloitte Danmark"},
+            "geo": {"aliases": ["Deloitte", "Deloitte Consulting", "Deloitte Danmark"]},
+        },
+    },
+    {
+        "slug": "ibm",
+        "name": "IBM Danmark ApS",
+        "cvr": "65305216",
+        "domain": "ibm.com",
+        "scraper_config": {
+            "jobindex": {"query": "IBM"},
+            "google_news": {"query": "IBM Danmark"},
+            "geo": {"aliases": ["IBM", "IBM Danmark", "IBM Consulting"]},
+        },
+    },
+    {
+        "slug": "sopra-steria",
+        "name": "Sopra Steria A/S",
+        "cvr": "20621117",
+        "domain": "soprasteria.dk",
+        "scraper_config": {
+            "jobindex": {"query": "Sopra Steria"},
+            "google_news": {"query": "Sopra Steria"},
+            "geo": {"aliases": ["Sopra Steria", "Sopra Steria A/S"]},
+        },
+    },
+]
+
+
+@router.post("/competitors/seed-large-firms")
+def admin_seed_large_firms(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Tilføj de store DK IT-konsulenthuse (Netcompany, KMD, Twoday, Capgemini, NNIT,
+    Trifork, IT Relation, CGI, Atea, Accenture, Deloitte, IBM, Sopra Steria).
+
+    Sikker at klikke gentagne gange - INSERTER kun nye konkurrenter (matcher på slug).
+    Eksisterende rækker røres ikke.
+    """
+    existing_slugs = {c.slug for c in session.exec(select(Competitor)).all()}
+    added: list[str] = []
+    skipped: list[str] = []
+    for firm in LARGE_FIRMS:
+        if firm["slug"] in existing_slugs:
+            skipped.append(firm["slug"])
+            continue
+        session.add(Competitor(active=True, **firm))
+        added.append(firm["slug"])
+    session.commit()
+    return {"added": added, "skipped_existing": skipped, "count_added": len(added)}
+
+
 # Anbefalede defaults pr. slug. Bruges af /admin/competitors/fill-defaults til at
 # populere tomme felter uden at overskrive brugerændringer.
 COMPETITOR_DEFAULTS: dict[str, dict[str, Any]] = {
