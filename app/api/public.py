@@ -16,6 +16,7 @@ from app.models import (
     Competitor,
     FinancialReport,
     GeoMention,
+    IndustryArticle,
     JobPosting,
     MarketJobPosting,
     MarketTrendSignal,
@@ -561,6 +562,123 @@ def market_trend_signals(
             "recommended_action": r.recommended_action,
             "confidence": r.confidence,
             "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/industry/overview")
+def industry_overview(
+    session: Session = Depends(get_session),
+    days: int = Query(default=7, le=90),
+) -> dict[str, Any]:
+    """Industri-presse status: artikler pr. kilde + pr. topic i sidste N dage."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    articles = list(
+        session.exec(
+            select(IndustryArticle).where(IndustryArticle.first_seen_at >= cutoff)
+        ).all()
+    )
+    total = len(articles)
+    classified = sum(1 for a in articles if a.is_classified)
+    by_source: dict[str, int] = {}
+    by_topic: dict[str, int] = {}
+    by_geo: dict[str, int] = {}
+    competitor_mentions: dict[str, int] = {}
+    for a in articles:
+        by_source[a.source] = by_source.get(a.source, 0) + 1
+        if a.topic:
+            by_topic[a.topic] = by_topic.get(a.topic, 0) + 1
+        if a.geo_scope:
+            by_geo[a.geo_scope] = by_geo.get(a.geo_scope, 0) + 1
+        for m in a.mentioned_competitors or []:
+            competitor_mentions[m] = competitor_mentions.get(m, 0) + 1
+    return {
+        "period_days": days,
+        "total": total,
+        "classified": classified,
+        "by_source": by_source,
+        "by_topic": by_topic,
+        "by_geo": by_geo,
+        "competitor_mentions": dict(sorted(competitor_mentions.items(), key=lambda x: -x[1])[:15]),
+    }
+
+
+@router.get("/industry/articles")
+def industry_articles(
+    session: Session = Depends(get_session),
+    topic: str | None = None,
+    source: str | None = None,
+    competitor: str | None = None,
+    days: int = Query(default=14, le=90),
+    limit: int = Query(default=50, le=200),
+) -> list[dict[str, Any]]:
+    """Liste af industri-artikler, kan filtreres efter topic/source/konkurrent."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    query = (
+        select(IndustryArticle)
+        .where(IndustryArticle.first_seen_at >= cutoff)
+        .order_by(IndustryArticle.first_seen_at.desc())  # type: ignore[union-attr]
+        .limit(limit)
+    )
+    if topic:
+        query = query.where(IndustryArticle.topic == topic)
+    if source:
+        query = query.where(IndustryArticle.source == source)
+    rows = list(session.exec(query).all())
+    if competitor:
+        rows = [r for r in rows if competitor in (r.mentioned_competitors or [])]
+    return [
+        {
+            "id": r.id,
+            "source": r.source,
+            "title": r.title,
+            "description": (r.description or "")[:400],
+            "url": r.url,
+            "topic": r.topic,
+            "geo_scope": r.geo_scope,
+            "mentioned_competitors": r.mentioned_competitors,
+            "published_at": r.published_at.isoformat() if r.published_at else None,
+            "first_seen_at": r.first_seen_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/industry/pulse")
+def industry_pulse(
+    session: Session = Depends(get_session),
+    week: str | None = None,
+) -> list[dict[str, Any]]:
+    """Sonnet-genererede industri-puls temaer (signal_type=industry_pulse)."""
+    target_week = week or session.exec(
+        select(func.max(MarketTrendSignal.week)).where(MarketTrendSignal.signal_type == "industry_pulse")
+    ).one()
+    if not target_week:
+        return []
+    rows = list(
+        session.exec(
+            select(MarketTrendSignal)
+            .where(
+                MarketTrendSignal.week == target_week,
+                MarketTrendSignal.signal_type == "industry_pulse",
+            )
+            .order_by(MarketTrendSignal.severity, MarketTrendSignal.created_at.desc())  # type: ignore[union-attr]
+        ).all()
+    )
+    return [
+        {
+            "week": r.week,
+            "topic": r.specialization,
+            "title": r.title,
+            "summary": r.summary,
+            "severity": r.severity,
+            "sample_size": r.sample_size,
+            "recommended_action": r.recommended_action,
+            "confidence": r.confidence,
+            "geo_scope": (r.source_refs or {}).get("geo_scope"),
+            "mentioned_competitors": (r.source_refs or {}).get("mentioned_competitors", []),
+            "recommended_owner": (r.source_refs or {}).get("recommended_owner"),
         }
         for r in rows
     ]

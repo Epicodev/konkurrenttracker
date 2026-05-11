@@ -88,6 +88,26 @@
     .trend-signal .summary { font-size: 13px; color: #333; line-height: 1.5; }
     .trend-signal .action { margin-top: 6px; font-size: 12px; color: #1a1a1a; font-style: italic; }
     .badge-emerging { background: #d97a1a; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; text-transform: uppercase; }
+    .pulse-theme { padding: 12px 14px; border-left: 3px solid #b35a3c; margin-bottom: 10px; background: #fbf7f5; border-radius: 0 6px 6px 0; }
+    .pulse-theme.urgent { border-color: #b41018; background: #fff5f5; }
+    .pulse-theme.opportunity { border-color: #1a7a1a; background: #f5fbf5; }
+    .pulse-theme h4 { margin: 0 0 4px; font-size: 14px; }
+    .pulse-theme .pulse-meta { font-size: 11px; color: #666; margin-bottom: 6px; }
+    .pulse-theme .pulse-summary { font-size: 13px; line-height: 1.5; }
+    .pulse-theme .pulse-action { margin-top: 6px; font-size: 12px; font-style: italic; }
+    .topic-pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #eee; color: #333; margin-right: 4px; }
+    .topic-pill.cloud { background: #e3f2ff; color: #0066cc; }
+    .topic-pill.ai_ml { background: #f4e8ff; color: #6a3fb5; }
+    .topic-pill.cybersecurity { background: #ffeaea; color: #b41018; }
+    .topic-pill.m_a { background: #fff4e5; color: #b46010; }
+    .topic-pill.funding { background: #e5f7e5; color: #1a7a1a; }
+    .topic-pill.regulation { background: #f0e8d8; color: #806020; }
+    .topic-pill.talent { background: #ffe8f0; color: #b41040; }
+    .topic-pill.new_tech { background: #e8ffea; color: #2a8030; }
+    .topic-pill.dk_market { background: #fff0d8; color: #c8780a; }
+    .article-row { padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .article-row:last-child { border-bottom: 0; }
+    .article-row .meta { font-size: 11px; color: #888; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -110,6 +130,7 @@
         <tr><td>Web-intel</td><td>Tech-stack (ATS, CMS, analytics, marketing-tools) + sitemap-velocity. Detekterer fx skift fra Workday til Greenhouse, eller pludselig vækst i blog-content.</td></tr>
         <tr><td>Regnskaber (virk.dk)</td><td>Officielle årsregnskaber via Erhvervsstyrelsens distribution-API. XBRL parses til omsætning, resultat, egenkapital, balancesum, ansatte. YoY, margin og soliditet beregnes.</td></tr>
         <tr><td>Marked-bred IT-scan</td><td>ALLE nye IT-jobs i DK (Jobindex IT-branche + IT-Jobbank). Haiku beriger pr. job med specialisering + tech-stack + emerging-flag. Sonnet finder ugentligt 4-8 markedstrend-signaler (growth / decline / emerging / spike / shift). Prediktivt - vi ser trends FØR konkurrenter reagerer.</td></tr>
+        <tr><td>Industri-presse</td><td>RSS-feeds fra 8 IT-medier (Version2, Børsen, IT-Branchen, Berlingske, Tech.eu, The Register, TechCrunch, SiliconANGLE). Haiku tagger pr. artikel med topic (cloud/AI/security/M&A/regulation/talent/...) + geo + konkurrent-mentions. Sonnet finder ugentligt 3-5 dominerende temaer i branchen.</td></tr>
         <tr><td>GEO (AI-søgning)</td><td>10 realistiske brugerspørgsmål stilles til Claude. Vi måler "share of voice" - hvor ofte hver konkurrent bliver nævnt + sentiment.</td></tr>
       </table>
 
@@ -138,6 +159,7 @@
     <button id="btn-scrape" style="padding: 8px 14px; background: #555; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Kun konkurrent-scrapere</button>
     <button id="btn-finance" style="padding: 8px 14px; background: #1a7a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent regnskaber</button>
     <button id="btn-market" style="padding: 8px 14px; background: #d97a1a; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Scan IT-markedet</button>
+    <button id="btn-industry" style="padding: 8px 14px; background: #b35a3c; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent industri-presse</button>
     <button id="btn-geo" style="padding: 8px 14px; background: #6a3fb5; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Mål AI-synlighed (GEO)</button>
     <button id="btn-synthesize" style="padding: 8px 14px; background: #b41018; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Generer signaler (Sonnet)</button>
     <button id="btn-report" style="padding: 8px 14px; background: #0066cc; color: white; border: 0; border-radius: 4px; font-size: 13px; cursor: pointer;">Hent rapport som PDF</button>
@@ -486,14 +508,17 @@
     }
 
     async function renderMarket() {
-      let overview, skills, emerging, signals, specs;
+      let overview, skills, emerging, signals, specs, industryOverview, industryPulse, industryArticles;
       try {
-        [overview, skills, emerging, signals, specs] = await Promise.all([
+        [overview, skills, emerging, signals, specs, industryOverview, industryPulse, industryArticles] = await Promise.all([
           fetchJSON("/api/market/overview"),
           fetchJSON("/api/market/top-skills?days=30&limit=15"),
           fetchJSON("/api/market/emerging?days=60&limit=20"),
           fetchJSON("/api/market/trend-signals?limit=10"),
           fetchJSON("/api/market/specializations?weeks=12"),
+          fetchJSON("/api/industry/overview?days=14").catch(() => ({total: 0, by_topic: {}, by_source: {}, competitor_mentions: {}})),
+          fetchJSON("/api/industry/pulse").catch(() => []),
+          fetchJSON("/api/industry/articles?days=14&limit=30").catch(() => []),
         ]);
       } catch (err) {
         document.getElementById("content").innerHTML = `<div class="empty">Fejl: ${err.message}</div>`;
@@ -595,11 +620,90 @@
         </div>
       `;
 
+      // Industri-puls (Sonnet-genererede temaer fra industri-presse)
+      let pulseHtml = "";
+      if (industryPulse.length > 0) {
+        pulseHtml = `
+          <div class="chart-card">
+            <h3>Industri-puls — hvad skrives der om?</h3>
+            <div class="chart-sub">${industryPulse[0].week} · Sonnet-aggregerede temaer fra ${industryOverview.total} artikler i sidste 14 dage</div>
+            ${industryPulse.map(p => `
+              <div class="pulse-theme ${p.severity}">
+                <h4>${escapeHtml(p.title)}</h4>
+                <div class="pulse-meta">
+                  <span class="topic-pill ${p.topic}">${p.topic || "other"}</span>
+                  ${p.geo_scope ? `<span style="color:#666">· ${p.geo_scope.toUpperCase()}</span>` : ""}
+                  ${p.sample_size ? ` · ${p.sample_size} artikler` : ""}
+                  ${p.mentioned_competitors && p.mentioned_competitors.length ? ` · nævner: ${p.mentioned_competitors.join(", ")}` : ""}
+                  · ${p.confidence} tillid
+                </div>
+                <div class="pulse-summary">${escapeHtml(p.summary)}</div>
+                ${p.recommended_action ? `<div class="pulse-action">→ ${escapeHtml(p.recommended_action)}${p.recommended_owner ? ` (${p.recommended_owner})` : ""}</div>` : ""}
+              </div>
+            `).join("")}
+          </div>
+        `;
+      } else if (industryOverview.total > 0) {
+        pulseHtml = `<div class="chart-card"><h3>Industri-puls</h3><div class="empty" style="padding:20px">${industryOverview.total} artikler hentet. Klassificering eller Sonnet-syntese mangler endnu.</div></div>`;
+      } else {
+        pulseHtml = `<div class="chart-card"><h3>Industri-puls</h3><div class="empty" style="padding:20px">Ingen industri-artikler hentet endnu. Klik "Hent industri-presse" øverst for at hente fra 8 RSS-kilder.</div></div>`;
+      }
+
+      // Topics + competitor-mentions cards
+      const topicEntries = Object.entries(industryOverview.by_topic || {}).sort((a, b) => b[1] - a[1]);
+      const maxTopic = Math.max(1, ...topicEntries.map(e => e[1]));
+      const topicHtml = `
+        <div class="market-card">
+          <h3>Trending topics (sidste 14 dage)</h3>
+          ${topicEntries.length === 0 ? '<div class="empty">Ingen klassificerede artikler endnu.</div>' :
+            topicEntries.map(([topic, count]) => `
+              <div class="skill-row">
+                <div class="skill-name"><span class="topic-pill ${topic}">${topic}</span></div>
+                <div class="skill-bar-wrap"><div class="skill-bar-fill" style="width:${(count / maxTopic * 100).toFixed(0)}%; background:#b35a3c"></div></div>
+                <div class="skill-count">${count}</div>
+              </div>
+            `).join("")}
+        </div>
+      `;
+
+      const mentionsEntries = Object.entries(industryOverview.competitor_mentions || {});
+      const mentionsHtml = `
+        <div class="market-card">
+          <h3>Konkurrent-mentions i industri-presse</h3>
+          <div class="chart-sub" style="margin-bottom:8px">Antal artikler hvor hver konkurrent nævnes på tværs af alle medier (≠ Google News-scraperen pr. firma)</div>
+          ${mentionsEntries.length === 0 ? '<div class="empty">Ingen mentions endnu.</div>' :
+            mentionsEntries.map(([slug, count]) => `
+              <div class="skill-row">
+                <div class="skill-name">${escapeHtml(slug)}</div>
+                <div class="skill-count">${count}</div>
+              </div>
+            `).join("")}
+        </div>
+      `;
+
+      // Rå artikel-feed
+      const articlesHtml = `
+        <div class="chart-card">
+          <h3>Industri-artikler (seneste 14 dage)</h3>
+          ${industryArticles.length === 0 ? '<div class="empty">Ingen artikler.</div>' :
+            industryArticles.slice(0, 25).map(a => `
+              <div class="article-row">
+                ${a.topic ? `<span class="topic-pill ${a.topic}">${a.topic}</span>` : ""}
+                <a href="${a.url}" target="_blank">${escapeHtml(a.title)}</a>
+                <div class="meta">${a.source} · ${(a.published_at || a.first_seen_at).slice(0, 10)}${a.mentioned_competitors && a.mentioned_competitors.length ? ` · nævner: ${a.mentioned_competitors.join(", ")}` : ""}</div>
+              </div>
+            `).join("")}
+        </div>
+      `;
+
       document.getElementById("content").innerHTML = `
         ${statsHtml}
         ${signalsHtml}
+        ${pulseHtml}
+        <div class="market-grid">${topicHtml}${mentionsHtml}</div>
         <div class="market-grid">${skillsHtml}${specsHtml}</div>
         ${emergingHtml}
+        ${articlesHtml}
       `;
       drawLineChart("chart-market-specs", specs);
     }
@@ -844,6 +948,11 @@
           await triggerAction("Scan marked", "/admin/scrape/market_jobs");
           await triggerAction("Klassificer marked (Haiku)", "/admin/analyze/market_classify");
         });
+        document.getElementById("btn-industry").addEventListener("click", async () => {
+          // Hent industri-presse + klassificer
+          await triggerAction("Hent industri-presse", "/admin/scrape/industry_press");
+          await triggerAction("Klassificer industri (Haiku)", "/admin/analyze/industry_classify");
+        });
         document.getElementById("btn-geo").addEventListener("click", () => triggerAction("GEO-pass", "/admin/analyze/geo"));
 
         // "Opdater alt"-knap: orkestrerer hele pipelinen med statusopdateringer.
@@ -856,16 +965,18 @@
           btn.style.opacity = "0.6";
           const startTime = Date.now();
           const steps = [
-            {label: "1/5 Konkurrent-scrapere", urls: ["/admin/scrape/all"]},
-            {label: "2/5 Scan IT-markedet", urls: ["/admin/scrape/market_jobs"]},
-            {label: "3/5 Haiku-klassificering", urls: ["/admin/analyze/market_classify"]},
-            {label: "4/5 Sonnet-syntese + markedstrends", urls: ["/admin/analyze/synthesize", "/admin/analyze/market_trends"]},
-            {label: "5/5 GEO-pass (AI-synlighed)", urls: ["/admin/analyze/geo"]},
+            {label: "1/6 Konkurrent-scrapere", urls: ["/admin/scrape/all"]},
+            {label: "2/6 Scan IT-markedet + industri-presse", urls: ["/admin/scrape/market_jobs", "/admin/scrape/industry_press"]},
+            {label: "3/6 Haiku-klassificering (marked + industri)", urls: ["/admin/analyze/market_classify", "/admin/analyze/industry_classify"]},
+            {label: "4/6 Sonnet-syntese + markedstrends + industri-puls", urls: ["/admin/analyze/synthesize", "/admin/analyze/market_trends", "/admin/analyze/industry_pulse"]},
+            {label: "5/6 GEO-pass (AI-synlighed)", urls: ["/admin/analyze/geo"]},
+            {label: "6/6 Færdig"},
           ];
           const errors = [];
           try {
             for (const step of steps) {
               status.textContent = `${step.label} kører...`;
+              if (!step.urls) continue;
               // Hvis flere URLs i samme trin: kør parallelt
               const results = await Promise.allSettled(step.urls.map(u => fetch(u, {method: "POST"})));
               results.forEach((r, i) => {

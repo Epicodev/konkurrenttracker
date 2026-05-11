@@ -16,6 +16,8 @@ from app.db import engine
 from app.notifications import slack_alert
 from app.analysis.classifier import classify_pending
 from app.analysis.geo_tracker import run_geo_pass
+from app.analysis.industry_classifier import classify_pending as classify_industry_pending
+from app.analysis.industry_pulse import generate_industry_pulse
 from app.analysis.market_classifier import classify_pending as classify_market_pending
 from app.analysis.market_trends import analyze_market_trends
 from app.analysis.synthesizer import synthesize_week
@@ -26,6 +28,7 @@ from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
 from app.scrapers.finance import FinanceScraper
 from app.scrapers.google_news import GoogleNewsScraper
+from app.scrapers.industry_press import scrape_industry_press
 from app.scrapers.jobindex import JobindexScraper
 from app.scrapers.market_jobs import scrape_market_jobs
 from app.scrapers.wayback import WaybackScraper
@@ -148,6 +151,34 @@ def _market_trends_job() -> None:
         )
 
 
+def _industry_scrape_job() -> None:
+    """Dagligt: scrape industri-presseartikler fra 8 RSS-kilder."""
+    logger.info("cron.industry_scrape.start")
+    with Session(engine) as session:
+        result = scrape_industry_press(session)
+    logger.info("cron.industry_scrape.done", **{k: result[k] for k in ("total_added", "total_seen", "failed_sources")})
+
+
+def _industry_classify_job() -> None:
+    """Dagligt: klassificer pending industri-artikler med Haiku."""
+    logger.info("cron.industry_classify.start")
+    with Session(engine) as session:
+        result = classify_industry_pending(session, limit=300)
+    logger.info("cron.industry_classify.done", **result)
+
+
+def _industry_pulse_job() -> None:
+    """Ugentligt: kør Sonnet industri-puls."""
+    logger.info("cron.industry_pulse.start")
+    with Session(engine) as session:
+        result = generate_industry_pulse(session)
+    logger.info("cron.industry_pulse.done", **result)
+    if result.get("signals_added", 0) == 0:
+        slack_alert(
+            f"⚠️ Industri-puls gav 0 temaer. Reason: {result.get('reason', 'ukendt')}"
+        )
+
+
 def _deliver_job() -> None:
     logger.info("cron.deliver.start")
     result = deliver()
@@ -167,11 +198,14 @@ JOB_CONFIGS: list[tuple[str, str, callable, CronTrigger]] = [  # type: ignore[ty
     ("classify_pending", "Klassificer nye jobopslag (Haiku)", lambda: _classify_job, CronTrigger(hour=4, minute=0)),
     ("scrape_market_jobs", "Scrape marked-bredt (Jobindex IT + IT-Jobbank)", lambda: _market_scrape_job, CronTrigger(hour=5, minute=0)),
     ("classify_market_jobs", "Klassificer marked-jobs (Haiku)", lambda: _market_classify_job, CronTrigger(hour=5, minute=30)),
+    ("scrape_industry_press", "Scrape industri-presse (RSS-feeds)", lambda: _industry_scrape_job, CronTrigger(hour=6, minute=0)),
+    ("classify_industry_press", "Klassificer industri-artikler (Haiku)", lambda: _industry_classify_job, CronTrigger(hour=6, minute=20)),
     ("scrape_wayback", "Scrape Wayback (web-snapshots)", lambda: _wrap(WaybackScraper()), CronTrigger(day_of_week="sun", hour=21, minute=0)),
     ("scrape_web_intel", "Scrape web-intel (tech stack + sitemap)", lambda: _wrap(WebIntelScraper()), CronTrigger(day_of_week="sun", hour=21, minute=20)),
     ("scrape_finance", "Scrape regnskaber (virk.dk distribution)", lambda: _wrap(FinanceScraper()), CronTrigger(day_of_week="sun", hour=21, minute=30)),
     ("geo_weekly", "GEO share-of-voice (Claude)", lambda: _geo_job, CronTrigger(day_of_week="sun", hour=21, minute=40)),
     ("market_trends_weekly", "Markedstrends (Sonnet)", lambda: _market_trends_job, CronTrigger(day_of_week="sun", hour=21, minute=50)),
+    ("industry_pulse_weekly", "Industri-puls (Sonnet)", lambda: _industry_pulse_job, CronTrigger(day_of_week="sun", hour=21, minute=55)),
     ("synthesize_weekly", "Ugentlig syntese (Sonnet)", lambda: _synthesize_job, CronTrigger(day_of_week="sun", hour=22, minute=0)),
     ("deliver_weekly", "Send ugentlig PDF-rapport (Postmark)", lambda: _deliver_job, CronTrigger(day_of_week="mon", hour=7, minute=0)),
 ]

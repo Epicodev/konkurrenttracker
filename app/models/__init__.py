@@ -2,6 +2,7 @@ from app.models.company_event import CompanyEvent
 from app.models.competitor import Competitor
 from app.models.financial_report import FinancialReport
 from app.models.geo_mention import GeoMention
+from app.models.industry_article import IndustryArticle
 from app.models.job_posting import JobPosting
 from app.models.market_job_posting import MarketJobPosting
 from app.models.market_trend_signal import MarketTrendSignal
@@ -13,6 +14,7 @@ __all__ = [
     "Competitor",
     "FinancialReport",
     "GeoMention",
+    "IndustryArticle",
     "JobPosting",
     "MarketJobPosting",
     "MarketTrendSignal",

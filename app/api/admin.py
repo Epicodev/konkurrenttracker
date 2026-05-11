@@ -12,6 +12,8 @@ from sqlmodel import Session, func, select
 
 from app.analysis.classifier import classify_pending
 from app.analysis.geo_tracker import run_geo_pass
+from app.analysis.industry_classifier import classify_pending as classify_industry_pending
+from app.analysis.industry_pulse import generate_industry_pulse
 from app.analysis.market_classifier import classify_pending as classify_market_pending
 from app.analysis.market_trends import analyze_market_trends
 from app.analysis.synthesizer import synthesize_week
@@ -25,6 +27,7 @@ from app.scrapers.career_sites import CareerSiteScraper
 from app.scrapers.cvr import CvrScraper
 from app.scrapers.finance import FinanceScraper
 from app.scrapers.google_news import GoogleNewsScraper
+from app.scrapers.industry_press import scrape_industry_press
 from app.scrapers.jobindex import JobindexScraper
 from app.scrapers.market_jobs import scrape_market_jobs
 from app.scrapers.wayback import WaybackScraper
@@ -622,6 +625,27 @@ def trigger_market_classify(
 def trigger_market_trends(session: Session = Depends(get_session)) -> dict[str, Any]:
     """Manuel trigger - generér markedstrend-signaler med Sonnet."""
     return analyze_market_trends(session)
+
+
+@router.post("/scrape/industry_press")
+def trigger_industry_press_scrape(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - hent industri-presseartikler fra alle RSS-kilder."""
+    return scrape_industry_press(session)
+
+
+@router.post("/analyze/industry_classify")
+def trigger_industry_classify(
+    session: Session = Depends(get_session),
+    limit: int = 300,
+) -> dict[str, Any]:
+    """Manuel trigger - klassificer pending industri-artikler med Haiku."""
+    return classify_industry_pending(session, limit=limit)
+
+
+@router.post("/analyze/industry_pulse")
+def trigger_industry_pulse(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Manuel trigger - generér ugentlig industri-puls med Sonnet."""
+    return generate_industry_pulse(session)
 
 
 @router.post("/report/build")
