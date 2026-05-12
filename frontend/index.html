@@ -396,6 +396,7 @@
             Klik "Gem" på en række for at gemme ændringer.
           </div>
           <div style="display:flex;gap:6px;">
+            <button id="btn-cleanup-fill" style="padding:6px 12px;background:#1a1a1a;color:white;border:0;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">⚡ Ryd op + fyld alt</button>
             <button id="btn-seed-large" style="padding:6px 12px;background:#1a7a1a;color:white;border:0;border-radius:4px;font-size:12px;cursor:pointer;white-space:nowrap;">+ Tilføj store IT-konsulenthuse</button>
             <button id="btn-fill-defaults" style="padding:6px 12px;background:#0066cc;color:white;border:0;border-radius:4px;font-size:12px;cursor:pointer;white-space:nowrap;">Fyld defaults ind</button>
           </div>
@@ -449,6 +450,26 @@
           } catch (err) {
             fillBtn.textContent = "✗ " + err.message;
             fillBtn.disabled = false;
+          }
+        });
+      }
+
+      // "Ryd op + fyld alt" - sletter placeholders + fylder ALLE manglende felter
+      const cleanupBtn = document.getElementById("btn-cleanup-fill");
+      if (cleanupBtn) {
+        cleanupBtn.addEventListener("click", async () => {
+          if (!confirm("Dette sletter placeholder-konkurrenter (Konkurrent 06-10 m.fl. uden CVR/queries) og udfylder manglende felter for resten. Fortsæt?")) return;
+          cleanupBtn.disabled = true;
+          cleanupBtn.textContent = "Arbejder...";
+          try {
+            const res = await fetch("/admin/competitors/cleanup-and-fill-all", {method: "POST"});
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            cleanupBtn.textContent = `✓ ${data.deleted.length} slettet, ${data.filled.length} fyldt, ${data.competitors_total_after} aktive`;
+            setTimeout(() => renderCompetitors(), 1800);
+          } catch (err) {
+            cleanupBtn.textContent = "✗ " + err.message;
+            cleanupBtn.disabled = false;
           }
         });
       }

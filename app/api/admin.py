@@ -20,7 +20,15 @@ from app.analysis.synthesizer import synthesize_week
 from app.auth import require_basic_auth
 from app.db import get_session
 from app.jobs.deliver_weekly import deliver
-from app.models import CompanyEvent, Competitor, JobPosting, Report, Signal
+from app.models import (
+    CompanyEvent,
+    Competitor,
+    FinancialReport,
+    GeoMention,
+    JobPosting,
+    Report,
+    Signal,
+)
 from app.reporting.builder import build_payload
 from app.reporting.pdf import render_html
 from app.scrapers.career_sites import CareerSiteScraper
@@ -252,7 +260,7 @@ COMPETITOR_DEFAULTS: dict[str, dict[str, Any]] = {
         "domain": "emagine.org",
         "jobindex_query": "ProData",
         "google_news_query": "ProData OR emagine Consulting",
-        "geo_aliases": ["ProData", "emagine", "ProData Consult"],
+        "geo_aliases": ["ProData", "emagine", "ProData Consult", "emagine Consulting"],
     },
     "right-people": {
         "name": "Right People Group ApS",
@@ -260,7 +268,7 @@ COMPETITOR_DEFAULTS: dict[str, dict[str, Any]] = {
         "domain": "rightpeoplegroup.com",
         "jobindex_query": "Right People",
         "google_news_query": "Right People Group",
-        "geo_aliases": ["Right People", "Right People Group", "RPG"],
+        "geo_aliases": ["Right People", "Right People Group"],
     },
     "hays": {
         "name": "Hays Specialist Recruitment Denmark A/S",
@@ -271,18 +279,119 @@ COMPETITOR_DEFAULTS: dict[str, dict[str, Any]] = {
         "geo_aliases": ["Hays", "Hays Denmark", "Hays Specialist Recruitment"],
     },
     "zen": {
-        "name": "Zen Consulting",
-        "jobindex_query": "Zen Consulting",
-        "google_news_query": "Zen Consulting",
-        "geo_aliases": ["Zen Consulting", "Zen"],
+        "name": "Zenit Consult A/S",
+        "cvr": "20515708",
+        "domain": "zenit.dk",
+        "jobindex_query": "Zenit Consult",
+        "google_news_query": "Zenit Consult",
+        "geo_aliases": ["Zenit", "Zenit Consult", "Zenit Consult A/S"],
     },
-    "brainville": {
-        "name": "Brainville",
-        "jobindex_query": "Brainville",
-        "google_news_query": "Brainville OR Ework Group",
-        "geo_aliases": ["Brainville", "Ework", "Ework Group"],
+    "7n": {
+        "name": "7N A/S",
+        "cvr": "50810216",
+        "domain": "7n.com",
+        "jobindex_query": "7N",
+        "google_news_query": "7N A/S",
+        "geo_aliases": ["7N", "7N A/S", "Group of 7N"],
     },
 }
+
+
+@router.post("/competitors/cleanup-and-fill-all")
+def admin_cleanup_and_fill_all(session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Et-klik oprydning + fuld udfyldelse:
+    1. SLETTER placeholder-konkurrenter (Konkurrent 06-10 og andre uden CVR/queries)
+       inkl. alle relaterede FK-rows (signals, events, jobs, geo_mentions, finance)
+    2. FYLDER alle tomme felter for de resterende konkurrenter med defaults
+       fra COMPETITOR_DEFAULTS og LARGE_FIRMS - overskriver IKKE brugerændringer.
+
+    Idempotent: sikker at klikke gentagne gange.
+    """
+    # Saml alle defaults i ét unified map
+    all_defaults: dict[str, dict[str, Any]] = {**COMPETITOR_DEFAULTS}
+    for firm in LARGE_FIRMS:
+        all_defaults[firm["slug"]] = {
+            "name": firm["name"],
+            "cvr": firm["cvr"],
+            "domain": firm["domain"],
+            "jobindex_query": (firm.get("scraper_config") or {}).get("jobindex", {}).get("query"),
+            "google_news_query": (firm.get("scraper_config") or {}).get("google_news", {}).get("query"),
+            "geo_aliases": (firm.get("scraper_config") or {}).get("geo", {}).get("aliases", []),
+        }
+
+    competitors = list(session.exec(select(Competitor)).all())
+
+    # --- Trin 1: slet ubrugelige rækker ---
+    # Sletkriterier:
+    # - Navn indeholder "placeholder" eller starter med "Konkurrent " (gamle placeholders)
+    # - INGEN CVR sat (CVR kræves for finance/CVR-scraperne og er kernen i identifikation)
+    deleted_slugs: list[str] = []
+    for c in competitors:
+        is_placeholder = "placeholder" in (c.name or "").lower() or (c.name or "").startswith("Konkurrent ")
+        # Hvis vi har defaults for slug'en der vil udfylde CVR, så lad endpointet udfylde i stedet for at slette
+        has_default_cvr = bool((all_defaults.get(c.slug) or {}).get("cvr"))
+        no_cvr_no_default = not c.cvr and not has_default_cvr
+        if is_placeholder or no_cvr_no_default:
+            # Cascade-delete relaterede FK-rows
+            for row in session.exec(select(Signal).where(Signal.competitor_id == c.id)).all():
+                session.delete(row)
+            for row in session.exec(select(GeoMention).where(GeoMention.competitor_id == c.id)).all():
+                session.delete(row)
+            for row in session.exec(select(FinancialReport).where(FinancialReport.competitor_id == c.id)).all():
+                session.delete(row)
+            for row in session.exec(select(JobPosting).where(JobPosting.competitor_id == c.id)).all():
+                session.delete(row)
+            for row in session.exec(select(CompanyEvent).where(CompanyEvent.competitor_id == c.id)).all():
+                session.delete(row)
+            session.delete(c)
+            deleted_slugs.append(c.slug)
+    session.commit()
+
+    # --- Trin 2: fyld manglende felter for de resterende ---
+    filled_slugs: list[str] = []
+    remaining = list(session.exec(select(Competitor)).all())
+    for c in remaining:
+        defaults = all_defaults.get(c.slug)
+        if not defaults:
+            continue
+        changed = False
+        # Top-level felter - kun fyld hvis tomme
+        for field in ("name", "cvr", "domain"):
+            if field in defaults and defaults[field] and not getattr(c, field):
+                setattr(c, field, defaults[field])
+                changed = True
+        # scraper_config merges ind
+        config = dict(c.scraper_config or {})
+        if defaults.get("jobindex_query"):
+            jx = dict(config.get("jobindex") or {})
+            if not jx.get("query"):
+                jx["query"] = defaults["jobindex_query"]
+                config["jobindex"] = jx
+                changed = True
+        if defaults.get("google_news_query"):
+            gn = dict(config.get("google_news") or {})
+            if not gn.get("query"):
+                gn["query"] = defaults["google_news_query"]
+                config["google_news"] = gn
+                changed = True
+        if defaults.get("geo_aliases"):
+            geo = dict(config.get("geo") or {})
+            if not geo.get("aliases"):
+                geo["aliases"] = list(defaults["geo_aliases"])
+                config["geo"] = geo
+                changed = True
+        if changed:
+            c.scraper_config = config
+            session.add(c)
+            filled_slugs.append(c.slug)
+    session.commit()
+
+    final_count = len(list(session.exec(select(Competitor)).all()))
+    return {
+        "deleted": deleted_slugs,
+        "filled": filled_slugs,
+        "competitors_total_after": final_count,
+    }
 
 
 @router.post("/competitors/fill-defaults")
