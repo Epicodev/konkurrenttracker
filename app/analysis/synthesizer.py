@@ -19,7 +19,20 @@ from app.models import CompanyEvent, Competitor, JobPosting, Signal
 logger = structlog.get_logger(__name__)
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
-SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "weekly_synthesis.md").read_text(encoding="utf-8")
+SYSTEM_PROMPT_TEMPLATE = (Path(__file__).parent / "prompts" / "weekly_synthesis.md").read_text(encoding="utf-8")
+
+
+def _dynamic_signal_range(active_count: int) -> str:
+    """Skalér antal signaler med antal aktive konkurrenter.
+
+    Formel: low = max(6, aktive // 2), high = max(8, aktive * 3 // 4).
+    Eksempler: 10 konk = '6-8', 17 = '8-12', 30 = '15-22'.
+    """
+    low = max(6, active_count // 2)
+    high = max(8, (active_count * 3) // 4)
+    if low >= high:
+        high = low + 2
+    return f"{low}-{high}"
 
 
 def _client() -> Anthropic | None:
@@ -103,13 +116,22 @@ def synthesize_week(session: Session, days_back: int = 7) -> dict[str, Any]:
         logger.info("synthesize.no_data", week=week)
         return {"signals_added": 0, "reason": "no_data_in_period"}
 
+    # Skalér ønsket antal signaler dynamisk med antal AKTIVE konkurrenter
+    active_count = len(list(session.exec(select(Competitor).where(Competitor.active == True)).all()))  # noqa: E712
+    signal_range = _dynamic_signal_range(active_count)
+    system_prompt = SYSTEM_PROMPT_TEMPLATE.replace("__SIGNAL_RANGE__", signal_range)
+    # Skalér ogsaa max_tokens proportionalt - hver signal er ~500 tokens
+    high = int(signal_range.split("-")[1])
+    max_tokens = max(4000, 600 * high)
+    logger.info("synthesize.config", active_competitors=active_count, signal_range=signal_range, max_tokens=max_tokens)
+
     response = client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=4000,
+        max_tokens=max_tokens,
         system=[
             {
                 "type": "text",
-                "text": SYSTEM_PROMPT,
+                "text": system_prompt,
                 "cache_control": {"type": "ephemeral"},
             }
         ],

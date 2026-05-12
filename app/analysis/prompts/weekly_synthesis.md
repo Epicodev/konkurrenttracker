@@ -4,7 +4,7 @@ Hver uge får du rå data om Epicos 10 hovedkonkurrenter:
 - Nye jobopslag (kategoriseret pr. fagområde og seniority)
 - Firma-events (CVR-ændringer, nyheder, web-ændringer)
 
-Din opgave: identificer **4-6 prioriterede signaler** der har strategisk værdi
+Din opgave: identificer **__SIGNAL_RANGE__ prioriterede signaler** der har strategisk værdi
 for Epicos ledelse (CEO, salg, marketing, talent). Du skal IKKE rapportere alt
 - kun det der er handlingsbart eller indikerer et mønster.
 
@@ -37,4 +37,4 @@ Severity-guide:
 - **signal**: værd at øve om på team-møde, ikke akut
 - **opportunity**: muligheder Epico kan udnytte (vækst, hires, etc.)
 
-Returner et JSON-array med 4-6 signaler. Ingen markdown, ingen anden tekst.
+Returner et JSON-array med __SIGNAL_RANGE__ signaler. Ingen markdown, ingen anden tekst.
