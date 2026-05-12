@@ -219,8 +219,24 @@
     }
 
     function renderEvents(rows) {
-      if (!rows.length) return `<div class="empty">Ingen events i perioden.</div>`;
-      return `<table><thead><tr><th>Konkurrent</th><th>Type</th><th>Titel</th><th>Kilde</th><th>Set</th></tr></thead><tbody>
+      const intro = `
+        <details class="info" style="margin-bottom: 16px;">
+          <summary>Hvad er "Firma-events"? Hvad fanger den?</summary>
+          <div class="info-body">
+            <p>En samlet strøm af alt vi observerer om konkurrenter <strong>udover deres jobopslag</strong> — fra 5 forskellige overvågningskilder, hver med deres egne event-typer:</p>
+            <table class="info-table">
+              <tr><td>CVR-API (cvrapi.dk)</td><td><code>cvr_baseline</code> · <code>cvr_change</code><br>Ændringer i navn, adresse, ansatte, branche, kreditstatus, konkurs, opløsning. Tidlig advarsel om finansielle problemer.</td></tr>
+              <tr><td>Google News</td><td><code>news</code><br>Danske nyhedsartikler om firmaet (søgt med firmanavn + alternative aliasser).</td></tr>
+              <tr><td>Web-snapshot</td><td><code>web_baseline</code> · <code>web_change</code><br>Forsiden hash'es ugentligt; ændringer på 200+ tegn registreres (nyt produkt, ny kunde-case, rebranding).</td></tr>
+              <tr><td>Web-intel</td><td><code>tech_change</code> · <code>sitemap_velocity</code><br>Skift i ATS/CMS/analytics-stack + content-offensiv (mange nye URLs i sitemap).</td></tr>
+              <tr><td>Finance (virk.dk)</td><td><code>annual_report</code><br>Ny årsrapport indberettet til Erhvervsstyrelsen.</td></tr>
+            </table>
+            <p style="margin-top: 10px; font-size: 12px; color: #666;">Events fra denne fane fodres ind i Sonnet's ugentlige syntese. Sonnet korrelerer fx "headcount falder + ny adresse + 5 nye SAP-roller" til ét urgent signal.</p>
+          </div>
+        </details>
+      `;
+      if (!rows.length) return intro + `<div class="empty">Ingen events i perioden.</div>`;
+      return intro + `<table><thead><tr><th>Konkurrent</th><th>Type</th><th>Titel</th><th>Kilde</th><th>Set</th></tr></thead><tbody>
         ${rows.map(e => `<tr>
           <td>${e.competitor.name}</td>
           <td>${e.event_type}</td>
