@@ -171,7 +171,6 @@
   <div class="tabs">
     <button class="tab active" data-tab="signals">Signaler</button>
     <button class="tab" data-tab="finance">Økonomi</button>
-    <button class="tab" data-tab="trends">Trends</button>
     <button class="tab" data-tab="geo">GEO (AI-synlighed)</button>
     <button class="tab" data-tab="events">Firma-events</button>
     <button class="tab" data-tab="market">Marked</button>
@@ -256,38 +255,6 @@
         "#1a1a1a", "#d8444b", "#3b95ff", "#56a456", "#e5a23a",
       ];
       return palette[idx % palette.length];
-    }
-
-    async function renderTrends() {
-      // Container med to charts
-      const html = `
-        <div class="chart-card">
-          <h3>Jobopslag pr. uge - pr. konkurrent</h3>
-          <div class="chart-sub">Sidste 90 dage. Spike pr. konkurrent indikerer hyringspres eller ny initiativ.</div>
-          <div class="chart-wrap"><canvas id="chart-jobs-comp"></canvas></div>
-        </div>
-        <div class="chart-card">
-          <h3>Jobopslag pr. uge - pr. fagområde</h3>
-          <div class="chart-sub">Sidste 90 dage. Viser om markedet flytter sig (fx mod AI/ML eller cloud).</div>
-          <div class="chart-wrap"><canvas id="chart-jobs-cat"></canvas></div>
-        </div>
-        <div class="chart-card">
-          <h3>GEO share-of-voice over tid</h3>
-          <div class="chart-sub">Hvor stor en andel af AI-svar på rekrutterings/konsulent-spørgsmål nævner hver konkurrent.</div>
-          <div class="chart-wrap"><canvas id="chart-geo"></canvas></div>
-        </div>
-      `;
-      document.getElementById("content").innerHTML = html;
-
-      const [jobsComp, jobsCat, geo] = await Promise.all([
-        fetchJSON("/api/trends/jobs?days=90").catch(() => ({ weeks: [], series: [] })),
-        fetchJSON("/api/trends/jobs-by-category?days=90").catch(() => ({ weeks: [], series: [] })),
-        fetchJSON("/api/geo/trends?weeks=12").catch(() => ({ weeks: [], series: [] })),
-      ]);
-
-      drawLineChart("chart-jobs-comp", jobsComp);
-      drawLineChart("chart-jobs-cat", jobsCat);
-      drawLineChart("chart-geo", geo, { yMax: 1, percent: true });
     }
 
     function drawLineChart(canvasId, payload, options = {}) {
@@ -751,10 +718,44 @@
       const histBySlug = {};
       history.series.forEach(h => { histBySlug[h.competitor.slug] = h; });
 
+      // Byg time-series data til store charts (omsætning + resultat over tid)
+      // X-akse: alle unikke regnskabsår på tværs, Y-akse: revenue eller profit_loss pr. konkurrent
+      const allYears = new Set();
+      history.series.forEach(h => h.years.forEach(y => allYears.add(y)));
+      const yearsSorted = [...allYears].sort();
+      const revenueSeries = history.series
+        .filter(h => h.revenue.some(v => v !== null))
+        .map(h => ({
+          name: h.competitor.name,
+          data: yearsSorted.map(y => {
+            const idx = h.years.indexOf(y);
+            return idx >= 0 ? h.revenue[idx] : null;
+          }),
+        }));
+      const profitSeries = history.series
+        .filter(h => h.profit_loss.some(v => v !== null))
+        .map(h => ({
+          name: h.competitor.name,
+          data: yearsSorted.map(y => {
+            const idx = h.years.indexOf(y);
+            return idx >= 0 ? h.profit_loss[idx] : null;
+          }),
+        }));
+
       document.getElementById("content").innerHTML = `
         <div style="margin-bottom:12px;color:#666;font-size:13px;">
           Officielle regnskaber hentet fra <code>distribution.virk.dk</code>. Alle tal i DKK.
           ${latest[0].fiscal_year ? `Seneste regnskabsår varierer pr. konkurrent.` : ""}
+        </div>
+        <div class="chart-card">
+          <h3>Omsætning over tid</h3>
+          <div class="chart-sub">5 års historik pr. konkurrent. Klasse B-selskaber er udeladt (rapporterer ikke omsætning).</div>
+          <div class="chart-wrap"><canvas id="chart-fin-revenue"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>Årets resultat over tid</h3>
+          <div class="chart-sub">5 års historik pr. konkurrent. Negative tal = underskud.</div>
+          <div class="chart-wrap"><canvas id="chart-fin-profit"></canvas></div>
         </div>
         <table class="finance-table">
           <thead><tr>
@@ -797,9 +798,13 @@
         <p style="margin-top:14px;font-size:12px;color:#888;">
           <strong>Bemærk:</strong> Mindre selskaber (Klasse B) må lovligt undlade at rapportere omsætning - de viser kun bruttoresultat.
           YoY og margin udregnes derfor kun hvor omsætningstal findes for begge år.
-          Soliditet = egenkapital / balancesum. Bla streg = omsætning. Rød streg = resultat.
+          Soliditet = egenkapital / balancesum. Blå streg = omsætning. Rød streg = resultat.
         </p>
       `;
+
+      // Tegn de store linje-charts efter DOM er klar
+      drawLineChart("chart-fin-revenue", {weeks: yearsSorted.map(String), series: revenueSeries});
+      drawLineChart("chart-fin-profit", {weeks: yearsSorted.map(String), series: profitSeries});
     }
 
     async function renderGeo() {
@@ -881,10 +886,9 @@
 
     async function refresh() {
       // Vis/skjul kompetitor-filteret afhængigt af tab
-      const noFilterTabs = new Set(["reports", "trends", "geo", "finance", "competitors", "market"]);
+      const noFilterTabs = new Set(["reports", "geo", "finance", "competitors", "market"]);
       document.querySelector(".filters").style.display = noFilterTabs.has(state.tab) ? "none" : "flex";
 
-      if (state.tab === "trends") return renderTrends();
       if (state.tab === "geo") return renderGeo();
       if (state.tab === "finance") return renderFinance();
       if (state.tab === "competitors") return renderCompetitors();
