@@ -1,85 +1,370 @@
+{# Epico Konkurrent-rapport - ugentlig PDF.
+   Brand-farver: #8B2234 (primær), #E01E37 (accent), #FFFCF2 (bg), #1a1a1a (tekst). #}
 <!DOCTYPE html>
 <html lang="da">
 <head>
 <meta charset="utf-8">
-<title>Epico konkurrent-rapport · uge {{ week }}</title>
+<title>Epico · Konkurrentoverblik · uge {{ week }}</title>
 <style>
   @page {
     size: A4;
-    margin: 24mm 18mm;
-    @bottom-right { content: "Side " counter(page) " af " counter(pages); font-size: 9pt; color: #999; }
-    @bottom-left { content: "Epico · konkurrenttracker · uge {{ week }}"; font-size: 9pt; color: #999; }
+    margin: 22mm 16mm 22mm 16mm;
+    @bottom-right { content: counter(page) " / " counter(pages); font-size: 8pt; color: #8B2234; }
+    @bottom-left { content: "Epico · konkurrentoverblik · uge " "{{ week }}"; font-size: 8pt; color: #8B2234; }
+    @top-right { content: ""; }
   }
-  body { font-family: "Helvetica", "Arial", sans-serif; color: #1a1a1a; font-size: 10pt; line-height: 1.5; }
-  h1 { color: #b41018; font-size: 24pt; margin: 0 0 4pt; }
-  h2 { color: #b41018; font-size: 16pt; margin: 32pt 0 8pt; border-bottom: 1px solid #b41018; padding-bottom: 4pt; }
-  h3 { font-size: 12pt; margin: 16pt 0 4pt; }
-  .cover { page-break-after: always; padding-top: 80pt; }
-  .cover .tagline { font-size: 14pt; color: #666; margin-top: 12pt; }
-  .stats { display: flex; gap: 8pt; margin: 20pt 0; }
-  .stat { flex: 1; background: #f5f5f5; padding: 12pt; border-radius: 4pt; text-align: center; }
-  .stat-value { font-size: 22pt; font-weight: 700; color: #b41018; }
-  .stat-label { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5pt; color: #666; }
-  .stat-delta { font-size: 9pt; color: #888; margin-top: 2pt; }
-  .signal { border-left: 4pt solid #b41018; padding: 8pt 12pt; margin: 12pt 0; background: #fafafa; page-break-inside: avoid; }
-  .signal.urgent { border-left-color: #b41018; background: #fff1f1; }
-  .signal.signal { border-left-color: #b48010; background: #fff8ec; }
-  .signal.opportunity { border-left-color: #1a7a1a; background: #f1faf1; }
-  .signal-meta { font-size: 9pt; color: #666; margin-bottom: 4pt; }
-  .signal-title { font-weight: 700; margin-bottom: 4pt; }
-  .signal-action { background: white; padding: 6pt 10pt; border-radius: 3pt; margin-top: 6pt; font-size: 9pt; }
-  table { width: 100%; border-collapse: collapse; margin: 8pt 0; }
-  th, td { padding: 4pt 6pt; text-align: left; border-bottom: 1px solid #eee; font-size: 9pt; }
-  th { background: #fafafa; font-weight: 600; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.3pt; }
-  .muted { color: #888; }
+  @page :first { @bottom-right { content: ""; } @bottom-left { content: ""; } }
+
+  body { font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif; color: #1a1a1a; font-size: 9.5pt; line-height: 1.5; }
+  h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.2pt; }
+  h1 { color: #8B2234; font-size: 32pt; margin: 0; line-height: 1.1; }
+  h2 { color: #8B2234; font-size: 16pt; margin: 28pt 0 10pt; padding-bottom: 5pt; border-bottom: 2pt solid #8B2234; page-break-after: avoid; }
+  h3 { font-size: 11pt; margin: 14pt 0 4pt; color: #1a1a1a; }
+  h4 { font-size: 10pt; margin: 8pt 0 3pt; }
+
+  /* ===== Cover ===== */
+  .cover { page-break-after: always; background: #FFFCF2; padding: 50pt 30pt; margin: -22mm -16mm; min-height: 60vh; }
+  .cover-header { color: #8B2234; font-size: 9pt; text-transform: uppercase; letter-spacing: 2pt; margin-bottom: 8pt; }
+  .cover h1 { font-size: 42pt; line-height: 1.05; }
+  .cover .week-pill { display: inline-block; background: #8B2234; color: #FFFCF2; padding: 3pt 12pt; border-radius: 12pt; font-size: 10pt; margin-top: 14pt; letter-spacing: 0.5pt; }
+  .cover .date { color: #666; font-size: 11pt; margin-top: 6pt; }
+  .cover .tagline {
+    margin-top: 50pt;
+    padding: 16pt 20pt;
+    background: white;
+    border-left: 4pt solid #E01E37;
+    font-size: 13pt;
+    line-height: 1.4;
+    color: #1a1a1a;
+  }
+  .cover .tldr { margin-top: 36pt; }
+  .cover .tldr h3 { color: #8B2234; font-size: 12pt; text-transform: uppercase; letter-spacing: 1.5pt; margin-bottom: 12pt; }
+  .cover .tldr ul { padding: 0; margin: 0; list-style: none; }
+  .cover .tldr li {
+    padding: 10pt 0 10pt 6pt;
+    border-bottom: 1px solid #eee;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+  .cover .tldr li:last-child { border-bottom: 0; }
+
+  /* ===== Stats grid ===== */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8pt; margin: 16pt 0 24pt; }
+  .stat { background: #FFFCF2; padding: 12pt; border-radius: 3pt; text-align: center; border: 1px solid #f0e8d8; }
+  .stat-value { font-size: 24pt; font-weight: 700; color: #8B2234; line-height: 1; }
+  .stat-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.8pt; color: #666; margin-top: 4pt; }
+  .stat-delta { font-size: 8.5pt; color: #888; margin-top: 3pt; }
+
+  /* ===== Signal cards ===== */
+  .signal {
+    border-left: 4pt solid #8B2234;
+    padding: 10pt 14pt;
+    margin: 10pt 0;
+    background: white;
+    page-break-inside: avoid;
+    border-radius: 0 3pt 3pt 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .signal.urgent { border-left-color: #E01E37; background: #fff7f7; }
+  .signal.signal { border-left-color: #c89a10; background: #fffaed; }
+  .signal.opportunity { border-left-color: #1a7a1a; background: #f5fbf5; }
+  .signal-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4pt; font-size: 8.5pt; }
+  .severity-pill {
+    display: inline-block; padding: 2pt 7pt; border-radius: 10pt; font-size: 7.5pt;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt;
+  }
+  .severity-pill.urgent { background: #E01E37; color: white; }
+  .severity-pill.signal { background: #c89a10; color: white; }
+  .severity-pill.opportunity { background: #1a7a1a; color: white; }
+  .signal-meta { color: #666; font-size: 8.5pt; }
+  .signal-title { font-weight: 700; font-size: 10.5pt; margin: 6pt 0 4pt; color: #1a1a1a; }
+  .signal-summary { font-size: 9pt; color: #333; line-height: 1.45; }
+  .signal-action {
+    background: rgba(139, 34, 52, 0.06);
+    padding: 7pt 10pt;
+    border-radius: 2pt;
+    margin-top: 7pt;
+    font-size: 8.5pt;
+    border-left: 2pt solid #8B2234;
+  }
+  .signal-action strong { color: #8B2234; }
+  .owner-badge {
+    display: inline-block;
+    background: #8B2234;
+    color: white;
+    padding: 1pt 6pt;
+    border-radius: 2pt;
+    font-size: 7.5pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5pt;
+    margin-left: 6pt;
+  }
+
+  /* ===== Tables ===== */
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 8.5pt; }
+  th, td { padding: 5pt 7pt; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+  th { background: #FFFCF2; font-weight: 700; text-transform: uppercase; font-size: 7.5pt; letter-spacing: 0.5pt; color: #8B2234; border-bottom: 1.5pt solid #8B2234; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th.num { text-align: right; }
+  tr:hover td { background: #fafafa; }
+  .delta-up { color: #1a7a1a; font-weight: 600; }
+  .delta-down { color: #E01E37; font-weight: 600; }
+
+  /* ===== Industri-puls + market trend cards ===== */
+  .pulse-card, .trend-card {
+    background: white;
+    border: 1px solid #f0e8d8;
+    border-left: 3pt solid #8B2234;
+    padding: 10pt 12pt;
+    margin: 8pt 0;
+    border-radius: 0 3pt 3pt 0;
+    page-break-inside: avoid;
+  }
+  .pulse-card.urgent, .trend-card.urgent { border-left-color: #E01E37; }
+  .pulse-card.opportunity, .trend-card.opportunity { border-left-color: #1a7a1a; }
+  .pulse-card-header, .trend-card-header { font-size: 8pt; color: #666; margin-bottom: 4pt; }
+  .pulse-card-title, .trend-card-title { font-weight: 700; font-size: 10.5pt; margin: 2pt 0 5pt; }
+  .pulse-card-summary, .trend-card-summary { font-size: 9pt; line-height: 1.45; color: #333; }
+  .pulse-card-action, .trend-card-action {
+    font-size: 8.5pt;
+    margin-top: 6pt;
+    padding-top: 6pt;
+    border-top: 1px dashed #ddd;
+    color: #555;
+  }
+
+  /* ===== Top-skills bar chart ===== */
+  .skill-row { display: flex; align-items: center; gap: 8pt; padding: 3pt 0; font-size: 9pt; }
+  .skill-name { width: 100pt; font-weight: 600; }
+  .skill-bar-track { flex: 1; background: #f5f5f5; height: 8pt; border-radius: 4pt; overflow: hidden; }
+  .skill-bar-fill { background: linear-gradient(90deg, #8B2234 0%, #E01E37 100%); height: 100%; }
+  .skill-count { width: 30pt; text-align: right; color: #666; font-variant-numeric: tabular-nums; }
+
+  /* ===== GEO bars ===== */
+  .geo-row { display: flex; align-items: center; gap: 8pt; padding: 4pt 0; font-size: 9pt; }
+  .geo-name { width: 180pt; }
+  .geo-bar-track { flex: 1; background: #f5f5f5; height: 6pt; border-radius: 3pt; overflow: hidden; }
+  .geo-bar-fill { background: #8B2234; height: 100%; }
+  .geo-pct { width: 35pt; text-align: right; font-weight: 600; }
+  .sentiment-tag { padding: 1pt 6pt; border-radius: 2pt; font-size: 7.5pt; font-weight: 600; text-transform: uppercase; margin-left: 4pt; }
+  .sentiment-positive { background: #d8f0d8; color: #1a7a1a; }
+  .sentiment-neutral { background: #eee; color: #555; }
+  .sentiment-negative { background: #fde0e0; color: #E01E37; }
+  .sentiment-mixed { background: #fff0d8; color: #c89a10; }
+
+  /* ===== Misc ===== */
+  .muted { color: #888; font-style: italic; }
+  .page-break { page-break-before: always; }
+  .lead { font-size: 10pt; color: #444; margin-bottom: 12pt; line-height: 1.55; }
+  .footer-note { font-size: 8pt; color: #999; margin-top: 12pt; border-top: 1px solid #eee; padding-top: 6pt; }
+  .section-intro { color: #666; font-size: 9pt; margin: 4pt 0 12pt; font-style: italic; }
 </style>
 </head>
 <body>
 
+{# ============ COVER + TL;DR ============ #}
 <section class="cover">
-  <h1>Konkurrentovervågning</h1>
-  <div class="tagline">Uge {{ week }} · {{ generated_date }}</div>
-  {% if top_tagline %}<p style="margin-top:40pt;font-size:13pt">{{ top_tagline }}</p>{% endif %}
+  <div class="cover-header">Epico · konkurrentintelligens</div>
+  <h1>Konkurrent- og<br>markedsoverblik</h1>
+  <span class="week-pill">UGE {{ week }}</span>
+  <div class="date">{{ generated_date }}</div>
+
+  {% if top_tagline %}
+  <div class="tagline">{{ top_tagline }}</div>
+  {% endif %}
+
+  {% if tldr %}
+  <div class="tldr">
+    <h3>Læs dette først</h3>
+    <ul>
+      {% for bullet in tldr %}<li>{{ bullet }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
 </section>
 
-<h2>Executive summary</h2>
-<p>I uge {{ week }} blev der registreret <strong>{{ stats.jobs_last_7d }}</strong> nye jobopslag og <strong>{{ stats.events_last_7d }}</strong> firma-events fordelt på {{ stats.competitors }} konkurrenter. Claude har udvalgt <strong>{{ signals|length }}</strong> prioriterede signaler.</p>
+{# ============ EXECUTIVE OVERVIEW ============ #}
+<h2>Executive overview</h2>
+<p class="lead">I uge {{ week }} blev der registreret <strong>{{ stats.jobs_last_7d }}</strong> nye jobopslag og <strong>{{ stats.events_last_7d }}</strong> firma-events fordelt på {{ stats.competitors }} konkurrenter. Claude har udvalgt <strong>{{ stats.signals_count }}</strong> prioriterede signaler ({{ stats.urgent_count }} urgent, {{ stats.signal_count }} signal, {{ stats.opportunity_count }} opportunity).</p>
 
 <div class="stats">
-  <div class="stat"><div class="stat-value">{{ stats.jobs_last_7d }}</div><div class="stat-label">Jobopslag</div></div>
-  <div class="stat"><div class="stat-value">{{ stats.events_last_7d }}</div><div class="stat-label">Firma-events</div></div>
-  <div class="stat"><div class="stat-value">{{ signals|length }}</div><div class="stat-label">Signaler</div></div>
   <div class="stat"><div class="stat-value">{{ stats.competitors }}</div><div class="stat-label">Konkurrenter</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.jobs_last_7d }}</div><div class="stat-label">Jobopslag · 7d</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.events_last_7d }}</div><div class="stat-label">Firma-events · 7d</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.signals_count }}</div><div class="stat-label">Signaler</div></div>
 </div>
 
+{# ============ SIGNALER ============ #}
+<h2>Signaler</h2>
+<div class="section-intro">Sonnet har analyseret ugens konkurrent-aktivitet og fundet de mest handlingsbare mønstre. Sorteret efter severity.</div>
+
 {% if signals %}
-{% for signal in signals %}
-<div class="signal {{ signal.severity }}">
-  <div class="signal-meta">{{ signal.competitor.name }} · {{ signal.domain }} · severity: {{ signal.severity }} · confidence: {{ signal.confidence }}</div>
-  <div class="signal-title">{{ signal.title }}</div>
-  <div>{{ signal.summary }}</div>
-  {% if signal.recommended_action %}
-  <div class="signal-action">
-    <strong>Anbefalet handling{% if signal.recommended_owner %} ({{ signal.recommended_owner }}){% endif %}:</strong> {{ signal.recommended_action }}
+  {% for signal in signals %}
+  <div class="signal {{ signal.severity }}">
+    <div class="signal-header">
+      <div class="signal-meta">
+        <strong>{{ signal.competitor.name }}</strong> · {{ signal.domain }} · {{ signal.confidence }} tillid
+      </div>
+      <span class="severity-pill {{ signal.severity }}">{{ signal.severity }}</span>
+    </div>
+    <div class="signal-title">{{ signal.title }}</div>
+    <div class="signal-summary">{{ signal.summary }}</div>
+    {% if signal.recommended_action %}
+    <div class="signal-action">
+      <strong>Anbefaling:</strong> {{ signal.recommended_action }}
+      {% if signal.recommended_owner %}<span class="owner-badge">{{ signal.recommended_owner }}</span>{% endif %}
+    </div>
+    {% endif %}
   </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">Ingen signaler i denne uge.</p>
+{% endif %}
+
+{# ============ MARKEDSTRENDS (prediktivt) ============ #}
+{% if market_trends or top_skills %}
+<h2 class="page-break">Markedstrends — hvad efterspørger markedet?</h2>
+<div class="section-intro">Aggregeret fra ALLE IT-jobs i Danmark (Jobindex + IT-Jobbank), klassificeret af Haiku. Vi ser trends FØR konkurrenter reagerer.</div>
+
+{% if market_trends %}
+  {% for t in market_trends %}
+  <div class="trend-card {{ t.severity }}">
+    <div class="trend-card-header">
+      <strong>{{ t.signal_type|upper }}</strong>
+      {% if t.specialization %} · {{ t.specialization }}{% endif %}
+      {% if t.tech %} · {{ t.tech }}{% endif %}
+      {% if t.delta_pct_str %} · <strong>{{ t.delta_pct_str }}</strong>{% endif %}
+      {% if t.sample_size %} · n={{ t.sample_size }}{% endif %}
+      · {{ t.confidence }} tillid
+    </div>
+    <div class="trend-card-title">{{ t.title }}</div>
+    <div class="trend-card-summary">{{ t.summary }}</div>
+    {% if t.recommended_action %}
+    <div class="trend-card-action">→ {{ t.recommended_action }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% endif %}
+
+{% if top_skills %}
+  <h3>Top 10 teknologier (sidste 30 dage)</h3>
+  {% set max_count = top_skills[0].count if top_skills else 1 %}
+  {% for s in top_skills %}
+  <div class="skill-row">
+    <div class="skill-name">{{ s.skill }}</div>
+    <div class="skill-bar-track"><div class="skill-bar-fill" style="width: {{ (s.count * 100 // max_count) }}%"></div></div>
+    <div class="skill-count">{{ s.count }}</div>
+  </div>
+  {% endfor %}
+{% endif %}
+{% endif %}
+
+{# ============ INDUSTRI-PULS ============ #}
+{% if industry_pulse %}
+<h2 class="page-break">Industri-puls — hvad skrives der om?</h2>
+<div class="section-intro">Sonnet har syntetiseret ugens dominerende temaer fra 8 IT-medier (Version2, Børsen, IT-Branchen, Berlingske, Tech.eu, The Register, TechCrunch, SiliconANGLE).</div>
+
+{% for p in industry_pulse %}
+<div class="pulse-card {{ p.severity }}">
+  <div class="pulse-card-header">
+    <strong>{{ p.topic|upper if p.topic else 'OTHER' }}</strong>
+    {% if p.geo_scope %} · {{ p.geo_scope|upper }}{% endif %}
+    {% if p.sample_size %} · {{ p.sample_size }} artikler{% endif %}
+    {% if p.mentioned_competitors %} · nævner: {{ p.mentioned_competitors | join(", ") }}{% endif %}
+    · {{ p.confidence }} tillid
+  </div>
+  <div class="pulse-card-title">{{ p.title }}</div>
+  <div class="pulse-card-summary">{{ p.summary }}</div>
+  {% if p.recommended_action %}
+  <div class="pulse-card-action">→ {{ p.recommended_action }}{% if p.recommended_owner %} <span class="owner-badge">{{ p.recommended_owner }}</span>{% endif %}</div>
   {% endif %}
 </div>
 {% endfor %}
-{% else %}
-<p class="muted">Ingen signaler i denne uge.</p>
 {% endif %}
 
-<h2>Domæne 01 · Jobopslag</h2>
+{# ============ FINANSIELT OVERBLIK ============ #}
+{% if finance.all_rows %}
+<h2 class="page-break">Finansielt overblik</h2>
+<div class="section-intro">Officielle årsregnskaber fra Erhvervsstyrelsens distribution-API (virk.dk). Klasse B-selskaber må undlade at rapportere omsætning — derfor "—" hvor det mangler.</div>
+
+{% if finance.top_growth or finance.bottom_growth %}
+<table>
+  <thead><tr><th>Højdepunkter</th><th class="num">YoY</th><th>Bemærk</th></tr></thead>
+  <tbody>
+    {% for r in finance.top_growth %}
+    <tr><td><strong>{{ r.competitor_name }}</strong></td><td class="num delta-up">{{ r.yoy_str }}</td><td class="muted">Vækst · {{ r.fiscal_year }}</td></tr>
+    {% endfor %}
+    {% for r in finance.bottom_growth %}
+    <tr><td><strong>{{ r.competitor_name }}</strong></td><td class="num delta-down">{{ r.yoy_str }}</td><td class="muted">Nedtur · {{ r.fiscal_year }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h3>Top 10 efter omsætning</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Konkurrent</th>
+      <th class="num">År</th>
+      <th class="num">Omsætning</th>
+      <th class="num">YoY</th>
+      <th class="num">Resultat</th>
+      <th class="num">Margin</th>
+      <th class="num">Egenkapital</th>
+      <th class="num">Soliditet</th>
+      <th class="num">Ansatte</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in finance.top_revenue %}
+    <tr>
+      <td>{{ r.competitor_name }}</td>
+      <td class="num">{{ r.fiscal_year }}</td>
+      <td class="num">{{ r.revenue_str }}</td>
+      <td class="num{% if r.yoy and r.yoy > 0 %} delta-up{% elif r.yoy and r.yoy < 0 %} delta-down{% endif %}">{{ r.yoy_str }}</td>
+      <td class="num">{{ r.profit_loss_str }}</td>
+      <td class="num">{{ r.margin_str }}</td>
+      <td class="num">{{ r.equity_str }}</td>
+      <td class="num">{{ r.equity_ratio_str }}</td>
+      <td class="num">{{ r.employees or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{# ============ GEO / AI-SYNLIGHED ============ #}
+{% if geo %}
+<h2 class="page-break">GEO — AI-synlighed</h2>
+<div class="section-intro">Hvor ofte nævner Claude hver konkurrent når den får realistiske brugerspørgsmål om dansk IT-konsulent/rekruttering? "Share of voice" = andel af svar med mention.</div>
+
+{% for g in geo %}
+<div class="geo-row">
+  <div class="geo-name"><strong>{{ g.competitor_name }}</strong>
+    <span class="sentiment-tag sentiment-{{ g.sentiment }}">{{ g.sentiment }}</span>
+  </div>
+  <div class="geo-bar-track"><div class="geo-bar-fill" style="width: {{ (g.share_of_voice * 100)|int }}%"></div></div>
+  <div class="geo-pct">{{ g.share_of_voice_str }}</div>
+</div>
+{% endfor %}
+
+<div class="footer-note">Måling: {{ geo[0].mentions if geo else 0 }} af {{ geo[0].total_queries if geo else 0 }} svar mention pr. konkurrent fra ugens AI-pass.</div>
+{% endif %}
+
+{# ============ BILAG ============ #}
+<h2 class="page-break">Bilag · Jobopslag pr. konkurrent</h2>
 {% if jobs_by_competitor %}
 <table>
-  <thead><tr><th>Konkurrent</th><th>Antal</th><th>Top kategorier</th><th>Senior/Junior</th></tr></thead>
+  <thead><tr><th>Konkurrent</th><th class="num">Antal</th><th>Top kategorier</th><th class="num">Senior/Junior</th></tr></thead>
   <tbody>
   {% for c in jobs_by_competitor %}
   <tr>
-    <td>{{ c.name }}</td>
-    <td>{{ c.count }}</td>
-    <td>{{ c.top_categories | join(", ") }}</td>
-    <td>{{ c.senior_count }} / {{ c.junior_count }}</td>
+    <td><strong>{{ c.name }}</strong></td>
+    <td class="num">{{ c.count }}</td>
+    <td>{{ c.top_categories | join(", ") if c.top_categories else "—" }}</td>
+    <td class="num">{{ c.senior_count }} / {{ c.junior_count }}</td>
   </tr>
   {% endfor %}
   </tbody>
@@ -88,16 +373,16 @@
 <p class="muted">Ingen jobopslag i ugen.</p>
 {% endif %}
 
-<h2>Domæne 02 · Firmaændringer</h2>
+<h2>Bilag · Firma-events</h2>
 {% if recent_events %}
 <table>
   <thead><tr><th>Dato</th><th>Konkurrent</th><th>Type</th><th>Beskrivelse</th></tr></thead>
   <tbody>
   {% for e in recent_events %}
   <tr>
-    <td>{{ e.detected_date }}</td>
+    <td class="num">{{ e.detected_date }}</td>
     <td>{{ e.competitor_name }}</td>
-    <td>{{ e.event_type }}</td>
+    <td><span class="muted">{{ e.event_type }}</span></td>
     <td>{{ e.title }}{% if e.description %}<br><span class="muted">{{ e.description }}</span>{% endif %}</td>
   </tr>
   {% endfor %}
@@ -107,14 +392,17 @@
 <p class="muted">Ingen firma-events i ugen.</p>
 {% endif %}
 
-<h2>Domæne 03 · Web &amp; sentiment</h2>
 {% if web_changes %}
-<ul>
+<h2>Bilag · Web-ændringer</h2>
+<ul style="padding-left: 16pt;">
 {% for w in web_changes %}<li><strong>{{ w.competitor_name }}</strong>: {{ w.title }}<br><span class="muted">{{ w.description }}</span></li>{% endfor %}
 </ul>
-{% else %}
-<p class="muted">Ingen web-ændringer registreret i ugen.</p>
 {% endif %}
+
+<div class="footer-note">
+  Genereret automatisk af Epico konkurrenttracker · {{ generated_date }} ·
+  Datakilder: virk.dk, Jobindex, IT-Jobbank, Google News, 8 industri-medier, Anthropic Claude (Haiku + Sonnet 4.6).
+</div>
 
 </body>
 </html>
