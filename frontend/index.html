@@ -173,7 +173,6 @@
     <button class="tab" data-tab="finance">Økonomi</button>
     <button class="tab" data-tab="trends">Trends</button>
     <button class="tab" data-tab="geo">GEO (AI-synlighed)</button>
-    <button class="tab" data-tab="jobs">Jobopslag</button>
     <button class="tab" data-tab="events">Firma-events</button>
     <button class="tab" data-tab="market">Marked</button>
     <button class="tab" data-tab="reports">Rapporter</button>
@@ -215,20 +214,6 @@
           <td><strong>${s.title}</strong><br><span style="color:#666;font-size:13px">${s.summary}</span></td>
           <td>${s.recommended_action || "-"}</td>
           <td>${s.recommended_owner || "-"}</td>
-        </tr>`).join("")}
-      </tbody></table>`;
-    }
-
-    function renderJobs(rows) {
-      if (!rows.length) return `<div class="empty">Ingen jobopslag i perioden.</div>`;
-      return `<table><thead><tr><th>Konkurrent</th><th>Titel</th><th>Kategori</th><th>Seniority</th><th>Kilde</th><th>Set</th></tr></thead><tbody>
-        ${rows.map(j => `<tr>
-          <td>${j.competitor.name}</td>
-          <td>${j.url ? `<a href="${j.url}" target="_blank">${j.title}</a>` : j.title}</td>
-          <td>${j.category || "-"}</td>
-          <td>${j.seniority || "-"}</td>
-          <td>${j.source}</td>
-          <td>${j.first_seen_at.slice(0, 10)}</td>
         </tr>`).join("")}
       </tbody></table>`;
     }
@@ -890,8 +875,8 @@
       if (state.tab === "market") return renderMarket();
 
       const params = state.competitor ? `?competitor=${encodeURIComponent(state.competitor)}` : "";
-      const path = { signals: "/api/signals", jobs: "/api/jobs", events: "/api/events", reports: "/admin/reports" }[state.tab];
-      const renderer = { signals: renderSignals, jobs: renderJobs, events: renderEvents, reports: renderReports }[state.tab];
+      const path = { signals: "/api/signals", events: "/api/events", reports: "/admin/reports" }[state.tab];
+      const renderer = { signals: renderSignals, events: renderEvents, reports: renderReports }[state.tab];
       const url = state.tab === "reports" ? path : `${path}${params}`;
       try {
         const data = await fetchJSON(url);
