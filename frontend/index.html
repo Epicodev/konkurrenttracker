@@ -985,13 +985,19 @@
           btn.disabled = true;
           btn.style.opacity = "0.6";
           const startTime = Date.now();
+          // Splittet ud så hver tung scraper får sin egen request-window
+          // (undgaar at finance/etc. mister timeout pga. wayback/web_intel)
           const steps = [
-            {label: "1/6 Konkurrent-scrapere", urls: ["/admin/scrape/all"]},
-            {label: "2/6 Scan IT-markedet + industri-presse", urls: ["/admin/scrape/market_jobs", "/admin/scrape/industry_press"]},
-            {label: "3/6 Haiku-klassificering (marked + industri)", urls: ["/admin/analyze/market_classify", "/admin/analyze/industry_classify"]},
-            {label: "4/6 Sonnet-syntese + markedstrends + industri-puls", urls: ["/admin/analyze/synthesize", "/admin/analyze/market_trends", "/admin/analyze/industry_pulse"]},
-            {label: "5/6 GEO-pass (AI-synlighed)", urls: ["/admin/analyze/geo"]},
-            {label: "6/6 Færdig"},
+            {label: "1/10 CVR + Jobindex + Google News", urls: ["/admin/scrape/cvr", "/admin/scrape/jobindex", "/admin/scrape/google_news"]},
+            {label: "2/10 Regnskaber (virk.dk)", urls: ["/admin/scrape/finance"]},
+            {label: "3/10 Karriere-sider", urls: ["/admin/scrape/career_sites"]},
+            {label: "4/10 Web-intel (tech stack + sitemap)", urls: ["/admin/scrape/web_intel"]},
+            {label: "5/10 Web-snapshot (wayback)", urls: ["/admin/scrape/wayback"]},
+            {label: "6/10 Scan IT-markedet + industri-presse", urls: ["/admin/scrape/market_jobs", "/admin/scrape/industry_press"]},
+            {label: "7/10 Haiku-klassificering", urls: ["/admin/analyze/market_classify", "/admin/analyze/industry_classify"]},
+            {label: "8/10 Sonnet-syntese + markedstrends + puls", urls: ["/admin/analyze/synthesize", "/admin/analyze/market_trends", "/admin/analyze/industry_pulse"]},
+            {label: "9/10 GEO-pass (AI-synlighed)", urls: ["/admin/analyze/geo"]},
+            {label: "10/10 Færdig"},
           ];
           const errors = [];
           try {

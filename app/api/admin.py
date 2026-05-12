@@ -684,15 +684,19 @@ def trigger_finance_scrape(session: Session = Depends(get_session)) -> dict[str,
 
 @router.post("/scrape/all")
 def trigger_all_scrapers(session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Manuel trigger - kører alle 7 scrapere sekventielt. Bruges til ad-hoc rapport-trigger."""
+    """Manuel trigger - kører alle 7 scrapere sekventielt. Lette først så finance/cvr/etc.
+    er sikre på at fuldføre selv hvis web_intel/wayback timeouter mod slutningen."""
     return {
-        "jobindex": _run_scraper(JobindexScraper(), "jobindex", session),
+        # Hurtige scrapere først (~1-3 sek pr. konkurrent)
         "cvr": _run_scraper(CvrScraper(), "cvr", session),
+        "jobindex": _run_scraper(JobindexScraper(), "jobindex", session),
         "google_news": _run_scraper(GoogleNewsScraper(), "google_news", session),
-        "career_sites": _run_scraper(CareerSiteScraper(), "career_page", session),
-        "wayback": _run_scraper(WaybackScraper(), "wayback", session),
-        "web_intel": _run_scraper(WebIntelScraper(), "web_intel", session),
         "finance": _run_scraper(FinanceScraper(), "finance", session),
+        # Mellem-hurtige
+        "career_sites": _run_scraper(CareerSiteScraper(), "career_page", session),
+        # Tunge (5-30 sek pr. konkurrent) sidst
+        "web_intel": _run_scraper(WebIntelScraper(), "web_intel", session),
+        "wayback": _run_scraper(WaybackScraper(), "wayback", session),
     }
 
 
