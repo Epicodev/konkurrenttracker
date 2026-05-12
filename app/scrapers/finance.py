@@ -82,8 +82,19 @@ def _all_xbrl_urls(publication: dict[str, Any]) -> list[str]:
 
 
 def _pick_pdf_url(publication: dict[str, Any]) -> str | None:
-    for doc in publication.get("dokumenter", []) or []:
+    """Returner menneskeligt læsbart link til regnskabet.
+
+    Prioritet:
+    1. application/pdf - faktisk PDF (renderes i browser)
+    2. application/xhtml+xml - iXBRL = HTML med embeddede XBRL-tags, renderes som læsbart dokument
+    3. Intet (kalderen falder tilbage til rå XBRL)
+    """
+    docs = publication.get("dokumenter", []) or []
+    for doc in docs:
         if (doc.get("dokumentMimeType") or "").lower() == "application/pdf":
+            return doc.get("dokumentUrl")
+    for doc in docs:
+        if (doc.get("dokumentMimeType") or "").lower() == "application/xhtml+xml":
             return doc.get("dokumentUrl")
     return None
 

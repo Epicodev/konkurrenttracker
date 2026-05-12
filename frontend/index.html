@@ -760,46 +760,57 @@
         <table class="finance-table">
           <thead><tr>
             <th>Konkurrent</th>
-            <th>Regnskabsår</th>
-            <th class="num">Omsætning</th>
-            <th class="num">YoY</th>
-            <th class="num">Årets resultat</th>
-            <th class="num">Margin</th>
-            <th class="num">Egenkapital</th>
-            <th class="num">Soliditet</th>
-            <th class="num">Ansatte</th>
-            <th class="num">Omsæt./FTE</th>
-            <th>Trend (omsæt/resultat)</th>
-            <th>PDF</th>
+            <th title="Regnskabsår sluttede">Regnskabsår</th>
+            <th class="num" title="XBRL: fsa:Revenue - omsætning for hele regnskabsperioden">Omsætning</th>
+            <th class="num" title="Year-over-year vækst i omsætning vs. forrige år">YoY</th>
+            <th class="num" title="XBRL: fsa:ProfitLoss - årets resultat efter skat">Årets resultat</th>
+            <th class="num" title="Resultat / omsætning (overskudsgrad)">Margin</th>
+            <th class="num" title="XBRL: fsa:Equity - egenkapital ved periodens udløb">Egenkapital</th>
+            <th class="num" title="Egenkapital / balancesum (finansiel styrke)">Soliditet</th>
+            <th class="num" title="XBRL: fsa:AverageNumberOfEmployees - gennemsnit over hele regnskabsåret (officielt indberettet)">Ansatte (regnskab)</th>
+            <th class="num" title="cvrapi.dk: aktuelt registreret antal ansatte (snapshot fra seneste CVR-scrape)">Ansatte (CVR nu)</th>
+            <th class="num" title="Omsætning / gennemsnitligt antal ansatte = produktivitet">Omsæt./FTE</th>
+            <th title="5 års historik: blå = omsætning, rød = resultat">Trend</th>
+            <th title="Klik for at åbne officielt regnskab fra Erhvervsstyrelsen">Kilde</th>
           </tr></thead>
           <tbody>
             ${latest.map(r => {
               const h = histBySlug[r.competitor.slug] || {revenue: [], profit_loss: []};
+              const src = r._sources || {};
+              const cvrEmpDiff = (r.cvr_employees_now && r.average_employees)
+                ? Math.round((r.cvr_employees_now - r.average_employees) / r.average_employees * 100) : null;
               return `<tr>
-                <td><strong>${r.competitor.name}</strong></td>
+                <td><strong>${r.competitor.name}</strong>${r.competitor.cvr ? `<br><span style="color:#888;font-size:11px">CVR ${r.competitor.cvr}</span>` : ""}</td>
                 <td>${r.fiscal_year}</td>
-                <td class="num">${fmtDKK(r.revenue)}</td>
+                <td class="num" title="${escapeHtml(src.revenue || "")}">${fmtDKK(r.revenue)}</td>
                 <td class="num">${fmtPct(r.revenue_yoy)}</td>
-                <td class="num">${fmtDKK(r.profit_loss)}</td>
+                <td class="num" title="${escapeHtml(src.profit_loss || "")}">${fmtDKK(r.profit_loss)}</td>
                 <td class="num">${fmtPct(r.profit_margin)}</td>
-                <td class="num">${fmtDKK(r.equity)}</td>
+                <td class="num" title="${escapeHtml(src.equity || "")}">${fmtDKK(r.equity)}</td>
                 <td class="num">${fmtPct(r.equity_ratio)}</td>
-                <td class="num">${r.average_employees ?? "<span style=\"color:#aaa\">-</span>"}</td>
+                <td class="num" title="${escapeHtml(src.average_employees || "")}">${r.average_employees ?? "<span style=\"color:#aaa\">-</span>"}</td>
+                <td class="num" title="${escapeHtml(src.cvr_employees_now || "")}">${r.cvr_employees_now ?? "<span style=\"color:#aaa\">-</span>"}${cvrEmpDiff !== null && Math.abs(cvrEmpDiff) >= 10 ? `<br><span style="font-size:10px;color:${cvrEmpDiff > 0 ? "#1a7a1a" : "#b41018"}">${cvrEmpDiff > 0 ? "+" : ""}${cvrEmpDiff}%</span>` : ""}</td>
                 <td class="num">${fmtDKK(r.revenue_per_employee)}</td>
                 <td>
                   ${sparklineSVG(h.revenue, "#0066cc")}
                   ${sparklineSVG(h.profit_loss, "#b41018")}
                 </td>
-                <td>${r.pdf_url ? `<a href="${r.pdf_url}" target="_blank">📄</a>` : (r.xbrl_url ? `<a href="${r.xbrl_url}" target="_blank">XBRL</a>` : "-")}</td>
+                <td>${r.pdf_url ? `<a href="${r.pdf_url}" target="_blank" title="Åbn officiel årsrapport på regnskaber.virk.dk">📄 PDF</a>` : (r.xbrl_url ? `<a href="${r.xbrl_url}" target="_blank" title="Rå XBRL-fil (XML)">XBRL</a>` : "-")}</td>
               </tr>`;
             }).join("")}
           </tbody>
         </table>
-        <p style="margin-top:14px;font-size:12px;color:#888;">
-          <strong>Bemærk:</strong> Mindre selskaber (Klasse B) må lovligt undlade at rapportere omsætning - de viser kun bruttoresultat.
-          YoY og margin udregnes derfor kun hvor omsætningstal findes for begge år.
-          Soliditet = egenkapital / balancesum. Blå streg = omsætning. Rød streg = resultat.
-        </p>
+        <div style="margin-top:14px;font-size:12px;color:#666;background:#fafafa;padding:10px 14px;border-radius:6px;border-left:3px solid #8B2234;">
+          <strong>Sådan læser du tabellen:</strong>
+          <ul style="margin:6px 0 0 0;padding-left:18px;line-height:1.6;">
+            <li><strong>Hover over en kolonne-titel</strong> for at se XBRL-kilden bag tallet (fx <code>fsa:Revenue</code>)</li>
+            <li><strong>Ansatte (regnskab):</strong> gennemsnit over hele regnskabsåret (lovpligtigt indberettet i årsrapport)</li>
+            <li><strong>Ansatte (CVR nu):</strong> aktuelt registreret antal i CVR (snapshot fra cvrapi.dk). %-tal viser afvigelse fra regnskabs-gennemsnittet — &gt;10% = enten kraftig vækst eller forskellig kontekst (koncern vs. moderselskab)</li>
+            <li><strong>Klik 📄 PDF</strong> for at åbne det officielle regnskab på regnskaber.virk.dk og verificere alle tal</li>
+            <li><strong>Klasse B-selskaber</strong> må lovligt undlade at rapportere omsætning — derfor "—" hvor det mangler</li>
+            <li><strong>Soliditet</strong> = egenkapital / balancesum (måler finansiel styrke)</li>
+          </ul>
+        </div>
       `;
 
       // Tegn de store linje-charts efter DOM er klar

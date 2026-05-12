@@ -290,9 +290,34 @@ def geo_trends(
     }
 
 
-def _finance_row(report: FinancialReport, competitor: Competitor) -> dict[str, Any]:
+def _cvr_employees_now(session: Session, competitor_id: int) -> int | None:
+    """Find aktuelt registreret antal ansatte fra seneste CVR-event.
+
+    Forskellig fra XBRL's AverageNumberOfEmployees (gennemsnit over regnskabsåret).
+    Dette er snapshot fra cvrapi.dk lige nu - opdateres af CVR-scraperen.
+    """
+    row = session.exec(
+        select(CompanyEvent)
+        .where(
+            CompanyEvent.competitor_id == competitor_id,
+            CompanyEvent.source == "cvr",
+        )
+        .order_by(CompanyEvent.detected_at.desc())  # type: ignore[union-attr]
+    ).first()
+    if row is None or not row.raw_data:
+        return None
+    # cvr_baseline har data direkte, cvr_change har under "current"
+    data = row.raw_data.get("current") if isinstance(row.raw_data.get("current"), dict) else row.raw_data
+    emp = data.get("employees") if isinstance(data, dict) else None
+    if isinstance(emp, (int, float)):
+        return int(emp)
+    return None
+
+
+def _finance_row(report: FinancialReport, competitor: Competitor, session: Session | None = None) -> dict[str, Any]:
+    cvr_emp = _cvr_employees_now(session, competitor.id) if session and competitor.id else None
     return {
-        "competitor": {"slug": competitor.slug, "name": competitor.name},
+        "competitor": {"slug": competitor.slug, "name": competitor.name, "cvr": competitor.cvr},
         "fiscal_year_start": report.fiscal_year_start.isoformat() if report.fiscal_year_start else None,
         "fiscal_year_end": report.fiscal_year_end.isoformat(),
         "fiscal_year": report.fiscal_year_end.year,
@@ -303,6 +328,7 @@ def _finance_row(report: FinancialReport, competitor: Competitor) -> dict[str, A
         "equity": report.equity,
         "assets": report.assets,
         "average_employees": report.average_employees,
+        "cvr_employees_now": cvr_emp,
         "profit_margin": (
             report.profit_loss / report.revenue
             if report.profit_loss is not None and report.revenue and report.revenue > 0
@@ -321,6 +347,16 @@ def _finance_row(report: FinancialReport, competitor: Competitor) -> dict[str, A
         "pdf_url": report.pdf_url,
         "xbrl_url": report.xbrl_url,
         "published_at": report.published_at.isoformat() if report.published_at else None,
+        # Metadata til tooltips: hvilken XBRL-felt hvert tal kommer fra
+        "_sources": {
+            "revenue": "XBRL: fsa:Revenue (omsætning for hele regnskabsperioden)",
+            "gross_profit": "XBRL: fsa:GrossProfitLoss (bruttoresultat)",
+            "profit_loss": "XBRL: fsa:ProfitLoss (årets resultat efter skat)",
+            "equity": "XBRL: fsa:Equity (egenkapital ved periodens udløb)",
+            "assets": "XBRL: fsa:Assets (balancesum ved periodens udløb)",
+            "average_employees": "XBRL: fsa:AverageNumberOfEmployees (gennemsnit over hele regnskabsåret - virksomheden indberetter dette tal)",
+            "cvr_employees_now": "cvrapi.dk: aktuelt registreret antal ansatte (snapshot fra seneste CVR-scrape - opdateres ugentligt)",
+        },
     }
 
 
@@ -344,7 +380,7 @@ def finance_latest(session: Session = Depends(get_session)) -> list[dict[str, An
             continue
         latest, competitor = reports[0]
         prior = reports[1][0] if len(reports) > 1 else None
-        data = _finance_row(latest, competitor)
+        data = _finance_row(latest, competitor, session)
         # YoY-vækst hvis både nuværende OG forrige har omsætning
         if prior and latest.revenue and prior.revenue:
             data["revenue_yoy"] = (latest.revenue - prior.revenue) / prior.revenue
